@@ -18,16 +18,25 @@ export default function DataGrid({
   pageSize = 50,
   columns: only,
   size = 'small',
+  onRowClick,
+  isSelected,
 }: {
   data?: FramePayload | null;
   height?: number | string;
   pageSize?: number;
   columns?: string[];
   size?: 'small' | 'middle';
+  /** 행 클릭 (대시보드 선택 연동) */
+  onRowClick?: (row: unknown[], e: React.MouseEvent) => void;
+  isSelected?: (row: unknown[]) => boolean;
 }) {
   const { cols, rows } = useMemo(() => {
     if (!data) return { cols: [], rows: [] };
-    const idx = data.columns.map((c, i) => ({ ...c, i })).filter((c) => !only?.length || only.includes(c.name));
+    // '__' 로 시작하는 컬럼은 내부용 (예: __sel)
+    const idx = data.columns
+      .map((c, i) => ({ ...c, i }))
+      .filter((c) => !c.name.startsWith('__') && (!only?.length || only.includes(c.name)))
+      .sort((a, b) => (only?.length ? only.indexOf(a.name) - only.indexOf(b.name) : 0));
     const cols = idx.map((c) => ({
       title: <span title={c.name}>{c.name}</span>,
       dataIndex: String(c.i),
@@ -45,7 +54,7 @@ export default function DataGrid({
       },
     }));
     const rows = data.rows.map((r, k) => {
-      const o: Record<string, unknown> = { __k: k };
+      const o: Record<string, unknown> = { __k: k, __row: r };
       r.forEach((v, i) => (o[String(i)] = v));
       return o;
     });
@@ -60,7 +69,9 @@ export default function DataGrid({
       dataSource={rows}
       scroll={{ x: 'max-content', y: height }}
       pagination={rows.length > pageSize ? { pageSize, size: 'small', showSizeChanger: false } : false}
-      className="num"
+      className={onRowClick ? 'num grid-selectable' : 'num'}
+      rowClassName={isSelected ? (r: any) => (isSelected(r.__row) ? 'row-selected' : '') : undefined}
+      onRow={onRowClick ? (r: any) => ({ onClick: (e) => onRowClick(r.__row, e) }) : undefined}
     />
   );
 }

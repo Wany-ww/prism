@@ -1,11 +1,12 @@
 import { App, Button, Input, Select, Space, Tag, Typography } from 'antd';
-import { ArrowLeftOutlined, EditOutlined, ExpandOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from '@ant-design/icons';
+import { AimOutlined, ArrowLeftOutlined, CloseOutlined, EditOutlined, ExpandOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from '@ant-design/icons';
 import GridLayout, { Layout, WidthProvider } from 'react-grid-layout';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, Dataset } from '../api';
 import WidgetView, { Widget } from '../dashboard/Widget';
 import WidgetEditor from '../dashboard/WidgetEditor';
+import type { Selection } from '../dashboard/link';
 import { useTrackRecent } from '../recent';
 
 const Grid = WidthProvider(GridLayout);
@@ -23,6 +24,14 @@ export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) 
   const [editW, setEditW] = useState<Widget | null>(null);
   const [dirty, setDirty] = useState(false);
   const [tick, setTick] = useState(0);
+  // 테이블 행 클릭으로 정한 선택 값 — 연동된 위젯들이 이 값 기준으로 바뀜
+  const [selection, setSelection] = useState<Selection | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !editW && setSelection(null);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [editW]);
 
   useEffect(() => {
     api.get(`/api/dashboards/${id}`).then((d) => {
@@ -110,6 +119,20 @@ export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) 
           )}
         </Space>
       </div>
+      {selection && (
+        <div className="dash-selection">
+          <AimOutlined />
+          <span>
+            <b>{selection.column}</b> = {selection.values.join(', ')}
+          </span>
+          <span className="muted">
+            · {widgets.find((x) => x.i === selection.source)?.title ?? ''} 에서 선택 · Ctrl+클릭으로 여러 개 · Esc 로 해제
+          </span>
+          <Button size="small" type="text" icon={<CloseOutlined />} onClick={() => setSelection(null)}>
+            선택 해제
+          </Button>
+        </div>
+      )}
       {!widgets.length && (
         <Typography.Paragraph type="secondary" style={{ textAlign: 'center', marginTop: 60 }}>
           ‘편집’ → ‘위젯 추가’ 로 차트/테이블/수치를 배치하세요. 위젯은 드래그로 이동하고 모서리로 크기를 조절합니다.
@@ -133,9 +156,13 @@ export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) 
                 w={w}
                 tick={tick}
                 editing={editing}
+                datasets={datasets}
+                selection={selection}
+                onSelect={setSelection}
                 onEdit={() => setEditW(w)}
                 onDelete={() => {
                   setWidgets((ws) => ws.filter((x) => x.i !== w.i));
+                  if (selection?.source === w.i) setSelection(null);
                   setDirty(true);
                 }}
               />

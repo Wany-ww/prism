@@ -1,4 +1,5 @@
 import io
+import json
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -37,9 +38,35 @@ def list_datasets(db: Session = Depends(get_db)):
     return out
 
 
+def _norm_keys(s: pd.Series) -> pd.Series:
+    """대시보드 선택 연동용 키 비교: 공백 제거, 1.0 → 1."""
+    if pd.api.types.is_datetime64_any_dtype(s):
+        s = s.dt.strftime("%Y-%m-%d %H:%M:%S.%f").str[:-3]  # frame_payload 와 같은 표기
+    s = s.astype(str).str.strip()
+    return s.str.replace(r"^(-?\d+)\.0+$", r"\1", regex=True)
+
+
 @router.get("/datasets/{name}/data")
-def dataset_data(name: str, limit: int = 1000, offset: int = 0, columns: str = "", db: Session = Depends(get_db)):
+def dataset_data(
+    name: str,
+    limit: int = 1000,
+    offset: int = 0,
+    columns: str = "",
+    filter_col: str = "",
+    filter_values: str = "",
+    db: Session = Depends(get_db),
+):
+    """filter_col/filter_values(JSON 배열) 를 주면 해당 컬럼 값이 목록에 있는 행만 반환."""
     df = _load(db, name)
+    if filter_col:
+        if filter_col not in df.columns:
+            raise HTTPException(400, f"'{filter_col}' 컬럼이 없습니다.")
+        try:
+            values = json.loads(filter_values or "[]")
+        except ValueError as e:
+            raise HTTPException(400, "filter_values 는 JSON 배열이어야 합니다.") from e
+        wanted = set(_norm_keys(pd.Series([str(v) for v in values], dtype=object)))
+        df = df[_norm_keys(df[filter_col]).isin(wanted)]
     if columns:
         cols = [c for c in columns.split(",") if c in df.columns]
         df = df[cols]

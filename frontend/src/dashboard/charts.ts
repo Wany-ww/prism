@@ -1,5 +1,6 @@
 import type { FramePayload } from '../api';
 import type { Mode } from '../theme';
+import { DS_COL, SEL_COL } from './link';
 
 // 토스 톤 범주형 팔레트 — validate_palette.js 로 라이트/다크 각각 전 항목 통과한 순서 (순환·재배열 금지)
 const THEMES = {
@@ -17,7 +18,8 @@ const THEMES = {
 };
 let T = THEMES.light;
 
-export type ChartKind = 'line' | 'area' | 'bar' | 'scatter' | 'histogram' | 'heatmap' | 'box' | 'pie';
+export type ChartKind = 'line' | 'area' | 'bar' | 'scatter' | 'xy' | 'histogram' | 'heatmap' | 'box' | 'pie';
+export type SpecShape = 'none' | 'circle' | 'rect';
 export type ChartConfig = {
   kind: ChartKind;
   x?: string;
@@ -28,7 +30,16 @@ export type ChartConfig = {
   trendline?: boolean;
   stack?: boolean;
   sort?: 'none' | 'asc' | 'desc';
+  /** 산점도·좌표 분포: 툴팁에 함께 보여줄 컬럼 (예: VAID) */
+  tip?: string;
+  /** 좌표 분포: X/Y 축 눈금 1:1 */
+  equal?: boolean;
+  /** 좌표 분포: 그룹별 평균 중심 표시 */
+  centroid?: boolean;
+  /** 좌표 분포: 기준 위치와 허용 범위 */
+  spec?: { shape?: SpecShape; cx?: number | null; cy?: number | null; r?: number | null; dx?: number | null; dy?: number | null };
 };
+export type ChartSize = { width: number; height: number };
 
 const axisCommon = () => ({
   axisLine: { lineStyle: { color: T.ink.axis } },
@@ -77,19 +88,36 @@ function base(legend: boolean) {
   };
 }
 
+/**
+ * 행을 색 구분 그룹으로 나눔. 여러 데이터셋을 겹친 위젯이면 데이터셋(_dataset)이 1차 구분,
+ * 시리즈 컬럼이 2차 구분. 데이터셋은 위젯에 추가한 순서, 시리즈 값은 이름순 (색이 값에 고정되도록).
+ */
 function seriesGroups(d: FramePayload, seriesCol?: string): [string, unknown[][]][] {
   const si = colIdx(d, seriesCol);
-  if (si < 0) return [['', d.rows]];
-  const m = new Map<string, unknown[][]>();
+  const di = colIdx(d, DS_COL);
+  if (si < 0 && di < 0) return [['', d.rows]];
+  const m = new Map<string, { ds: number; s: string; rows: unknown[][] }>();
+  const dsOrder = new Map<string, number>();
   for (const r of d.rows) {
-    const k = r[si] == null ? '(없음)' : String(r[si]);
-    if (!m.has(k)) m.set(k, []);
-    m.get(k)!.push(r);
+    const ds = di >= 0 ? String(r[di]) : '';
+    if (!dsOrder.has(ds)) dsOrder.set(ds, dsOrder.size);
+    const s = si >= 0 ? (r[si] == null ? '(없음)' : String(r[si])) : '';
+    const k = [ds, s].filter(Boolean).join(' · ');
+    if (!m.has(k)) m.set(k, { ds: dsOrder.get(ds)!, s, rows: [] });
+    m.get(k)!.rows.push(r);
   }
-  return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  return [...m.entries()].sort((a, b) => a[1].ds - b[1].ds || a[1].s.localeCompare(b[1].s)).map(([k, v]) => [k, v.rows]);
 }
 
-export function buildOption(cfg: ChartConfig, d: FramePayload, mode: Mode = 'light'): any {
+/** 선택 연동 '강조' 상태: __sel 컬럼이 있고 하나라도 true 면 선택 행 인덱스 집합 */
+function selectedRows(d: FramePayload): Set<unknown[]> | null {
+  const i = colIdx(d, SEL_COL);
+  if (i < 0) return null;
+  const s = new Set(d.rows.filter((r) => r[i] === true));
+  return s;
+}
+
+export function buildOption(cfg: ChartConfig, d: FramePayload, mode: Mode = 'light', size?: ChartSize): any {
   T = THEMES[mode];
   switch (cfg.kind) {
     case 'heatmap':
@@ -98,6 +126,8 @@ export function buildOption(cfg: ChartConfig, d: FramePayload, mode: Mode = 'lig
       return histogram(cfg, d);
     case 'scatter':
       return scatter(cfg, d);
+    case 'xy':
+      return xyPlot(cfg, d, size);
     case 'box':
       return box(cfg, d);
     case 'pie':
@@ -167,7 +197,7 @@ function cartesian(cfg: ChartConfig, d: FramePayload) {
   };
 }
 
-function linreg(pts: [number, number][]) {
+function linreg(pts: [number, number, ...unknown[]][]) {
   const n = pts.length;
   if (n < 3) return null;
   let sx = 0, sy = 0, sxx = 0, sxy = 0;
@@ -180,19 +210,52 @@ function linreg(pts: [number, number][]) {
   return { slope, intercept: (sy - slope * sx) / n };
 }
 
+const emptyOption = (text: string) => ({ title: { text, left: 'center', top: 'middle', textStyle: { color: T.ink.muted, fontSize: 13, fontWeight: 400 } } });
+
+type Pt = [number, number, unknown];
+/** 행 → [x, y, 툴팁값] (숫자가 아닌 좌표는 제외) */
+function points(rows: unknown[][], xi: number, yi: number, ti: number, only?: Set<unknown[]> | null): Pt[] {
+  const out: Pt[] = [];
+  for (const r of rows) {
+    if (only && !only.has(r)) continue;
+    const x = num(r[xi]), y = num(r[yi]);
+    if (x !== null && y !== null) out.push([x, y, ti >= 0 ? r[ti] : undefined]);
+  }
+  return out;
+}
+
+/** 선택 연동으로 강조된 점: 크게 + 파문 효과, 같은 이름이라 범례 토글도 함께 */
+function selectedSeries(name: string, color: string, data: Pt[]) {
+  return {
+    name,
+    type: 'effectScatter',
+    data,
+    symbolSize: 13,
+    rippleEffect: { brushType: 'stroke', scale: 2.4, period: 3 },
+    itemStyle: { color, borderColor: T.ink.surface, borderWidth: 2 },
+    z: 10,
+  };
+}
+
+const tipLine = (cfg: ChartConfig, v: unknown) => (cfg.tip && v !== undefined && v !== null ? `${cfg.tip}: <b>${v}</b><br/>` : '');
+
 function scatter(cfg: ChartConfig, d: FramePayload) {
   const xi = colIdx(d, cfg.x);
+  const ti = colIdx(d, cfg.tip);
   const ys = (cfg.y ?? []).filter((y) => colIdx(d, y) >= 0);
   const groups = seriesGroups(d, cfg.series);
+  const sel = selectedRows(d);
+  const hl = !!sel?.size;
   const out: any[] = [];
   let k = 0;
   for (const [gname, rows] of groups) {
     for (const y of ys) {
       const yi = colIdx(d, y);
-      const pts = rows.map((r) => [num(r[xi]), num(r[yi])]).filter((p) => p[0] !== null && p[1] !== null) as [number, number][];
+      const pts = points(rows, xi, yi, ti);
       const name = gname ? (ys.length > 1 ? `${gname} · ${y}` : gname) : y;
       const color = T.series[k++ % T.series.length];
-      out.push({ name, type: 'scatter', data: pts, symbolSize: 7, itemStyle: { color, opacity: 0.5, borderColor: T.ink.surface, borderWidth: 1 } });
+      out.push({ name, type: 'scatter', data: pts, symbolSize: 7, large: !hl && pts.length > 5000, itemStyle: { color, opacity: hl ? 0.12 : 0.5, borderColor: T.ink.surface, borderWidth: 1 } });
+      if (hl) out.push(selectedSeries(name, color, points(rows, xi, yi, ti, sel)));
       if (cfg.trendline) {
         const lr = linreg(pts);
         if (lr) {
@@ -215,11 +278,168 @@ function scatter(cfg: ChartConfig, d: FramePayload) {
   const b = base(groups.length * ys.length > 1);
   return {
     ...b,
-    tooltip: { ...b.tooltip, trigger: 'item', formatter: (p: any) => `${p.seriesName}<br/>${cfg.x}: <b>${round(p.value[0])}</b><br/>${ys.length === 1 ? ys[0] : 'y'}: <b>${round(p.value[1])}</b>` },
+    tooltip: { ...b.tooltip, trigger: 'item', formatter: (p: any) => `${p.seriesName}<br/>${tipLine(cfg, p.value[2])}${cfg.x}: <b>${round(p.value[0])}</b><br/>${ys.length === 1 ? ys[0] : 'y'}: <b>${round(p.value[1])}</b>` },
     xAxis: { type: 'value', scale: true, name: cfg.x, nameLocation: 'middle', nameGap: 24, ...axisCommon() },
     yAxis: { type: 'value', scale: true, name: ys.length === 1 ? ys[0] : undefined, nameLocation: 'middle', nameGap: 36, ...axisCommon() },
     grid: { ...b.grid, left: 26, bottom: 26 },
     series: out,
+  };
+}
+
+function niceStep(span: number, n = 5) {
+  const raw = span / n;
+  const p = 10 ** Math.floor(Math.log10(raw));
+  const f = raw / p;
+  return (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * p;
+}
+const fix = (v: number) => Number(v.toPrecision(12));
+
+/**
+ * 좌표 분포 (X·Y 위치): 핀/부품 위치처럼 두 값이 한 점의 좌표인 데이터.
+ * 상관 산점도와 달리 축 눈금을 1:1 로 맞추고, 기준 위치·허용 범위·그룹별 평균 중심을 함께 표시.
+ */
+function xyPlot(cfg: ChartConfig, d: FramePayload, size?: ChartSize) {
+  const xi = colIdx(d, cfg.x);
+  const yName = cfg.y?.[0];
+  const yi = colIdx(d, yName);
+  const ti = colIdx(d, cfg.tip);
+  if (xi < 0 || yi < 0) return emptyOption('X, Y 좌표 컬럼을 지정하세요');
+  const sel = selectedRows(d);
+  const hl = !!sel?.size;
+
+  const sp = cfg.spec ?? {};
+  const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+  const shape = sp.shape ?? 'none';
+  const hasSpec =
+    shape !== 'none' && finite(sp.cx) && finite(sp.cy) && (shape === 'circle' ? finite(sp.r) && sp.r > 0 : finite(sp.dx) && finite(sp.dy) && sp.dx > 0 && sp.dy > 0);
+  const inSpec = (x: number, y: number) =>
+    !hasSpec || (shape === 'circle' ? (x - sp.cx!) ** 2 + (y - sp.cy!) ** 2 <= sp.r! ** 2 : Math.abs(x - sp.cx!) <= sp.dx! && Math.abs(y - sp.cy!) <= sp.dy!);
+
+  const groups = seriesGroups(d, cfg.series);
+  const series: any[] = [];
+  let xlo = Infinity, xhi = -Infinity, ylo = Infinity, yhi = -Infinity;
+  const extend = (x: number, y: number) => {
+    xlo = Math.min(xlo, x); xhi = Math.max(xhi, x); ylo = Math.min(ylo, y); yhi = Math.max(yhi, y);
+  };
+  let total = 0, outside = 0;
+  const single = `${cfg.x} × ${yName}`;
+  groups.forEach(([g, rows], k) => {
+    const name = g || single;
+    const color = T.series[k % T.series.length];
+    const pts = points(rows, xi, yi, ti);
+    if (!pts.length) return;
+    const ins: Pt[] = [], outs: Pt[] = [];
+    let sx = 0, sy = 0;
+    for (const p of pts) {
+      extend(p[0], p[1]);
+      (inSpec(p[0], p[1]) ? ins : outs).push(p);
+      sx += p[0]; sy += p[1];
+    }
+    total += pts.length;
+    outside += outs.length;
+    series.push({ name, type: 'scatter', data: ins, symbolSize: 6, large: !hl && ins.length > 5000, itemStyle: { color, opacity: hl ? 0.12 : 0.55, borderColor: T.ink.surface, borderWidth: 0.5 } });
+    if (outs.length)
+      series.push({ name, type: 'scatter', data: outs, symbol: 'triangle', symbolSize: 9, itemStyle: { color, opacity: hl ? 0.2 : 1, borderColor: T.ink.primary, borderWidth: 1 }, z: 4 });
+    if (hl) series.push(selectedSeries(name, color, points(rows, xi, yi, ti, sel)));
+    if (cfg.centroid ?? true) {
+      const mx = sx / pts.length, my = sy / pts.length;
+      const sdx = Math.sqrt(pts.reduce((a, p) => a + (p[0] - mx) ** 2, 0) / pts.length);
+      const sdy = Math.sqrt(pts.reduce((a, p) => a + (p[1] - my) ** 2, 0) / pts.length);
+      series.push({
+        name,
+        type: 'scatter',
+        // 굵은 + 표시
+        symbol: 'path://M-1,-0.18H1V0.18H-1Z M-0.18,-1H0.18V1H-0.18Z',
+        symbolSize: 18,
+        itemStyle: { color, borderColor: T.ink.surface, borderWidth: 1.5 },
+        data: [{ value: [mx, my], centroid: { n: pts.length, sdx, sdy } }],
+        z: 12,
+      });
+    }
+  });
+  if (!total) return emptyOption('표시할 좌표가 없어요');
+
+  if (hasSpec) {
+    const cx = sp.cx!, cy = sp.cy!;
+    let ring: number[][];
+    if (shape === 'circle') {
+      ring = Array.from({ length: 73 }, (_, i) => [cx + sp.r! * Math.cos((i / 72) * 2 * Math.PI), cy + sp.r! * Math.sin((i / 72) * 2 * Math.PI)]);
+      extend(cx - sp.r!, cy - sp.r!);
+      extend(cx + sp.r!, cy + sp.r!);
+    } else {
+      const [dx, dy] = [sp.dx!, sp.dy!];
+      ring = [[cx - dx, cy - dy], [cx + dx, cy - dy], [cx + dx, cy + dy], [cx - dx, cy + dy], [cx - dx, cy - dy]];
+      extend(cx - dx, cy - dy);
+      extend(cx + dx, cy + dy);
+    }
+    series.unshift({
+      name: '허용 범위',
+      type: 'line',
+      data: ring,
+      symbol: 'none',
+      silent: true,
+      lineStyle: { color: T.ink.secondary, width: 1.5, type: 'dashed' },
+      markLine: {
+        silent: true,
+        symbol: 'none',
+        label: { show: false },
+        lineStyle: { color: T.ink.axis, width: 1, type: 'solid' },
+        data: [{ xAxis: cx }, { yAxis: cy }],
+      },
+      tooltip: { show: false },
+      z: 1,
+    });
+  }
+
+  const legend = groups.length > 1;
+  const b = base(legend);
+  const xAxis: any = { type: 'value', scale: true, name: cfg.x, nameLocation: 'middle', nameGap: 26, ...axisCommon() };
+  const yAxis: any = { type: 'value', scale: true, name: yName, nameLocation: 'middle', nameGap: 46, ...axisCommon() };
+  let grid: any = { ...b.grid, left: 30, bottom: 28, top: legend ? 34 : 24 };
+
+  // 1:1 축: 두 축의 범위 폭과 눈금 간격을 같게 하고, 그리는 영역을 정사각형으로
+  if ((cfg.equal ?? true) && size && size.width > 120 && size.height > 120) {
+    const span = Math.max(xhi - xlo, yhi - ylo) * 1.1 || Math.abs(xlo) * 0.1 || 1;
+    const step = niceStep(span);
+    const f0x = Math.floor(xlo / step), f0y = Math.floor(ylo / step);
+    const nx = Math.max(1, Math.ceil(xhi / step) - f0x), ny = Math.max(1, Math.ceil(yhi / step) - f0y);
+    const n = Math.max(nx, ny);
+    const xmin = (f0x - Math.floor((n - nx) / 2)) * step;
+    const ymin = (f0y - Math.floor((n - ny) / 2)) * step;
+    const dec = Math.max(0, -Math.floor(Math.log10(step) + 1e-9));
+    const fmt = (v: number) => v.toFixed(dec);
+    Object.assign(xAxis, { scale: false, min: fix(xmin), max: fix(xmin + n * step), interval: step, axisLabel: { ...xAxis.axisLabel, formatter: fmt } });
+    Object.assign(yAxis, { scale: false, min: fix(ymin), max: fix(ymin + n * step), interval: step, axisLabel: { ...yAxis.axisLabel, formatter: fmt } });
+    const left = 64, right = 16, top = legend ? 34 : 24, bottom = 42;
+    const side = Math.max(60, Math.min(size.width - left - right, size.height - top - bottom));
+    grid = { left: left + (size.width - left - right - side) / 2, top: top + (size.height - top - bottom - side) / 2, width: side, height: side, containLabel: false };
+  }
+
+  const graphic = hasSpec
+    ? [{ type: 'text', right: 12, top: 2, style: { text: `범위 밖 ${outside.toLocaleString()} / ${total.toLocaleString()} (${((outside / total) * 100).toFixed(1)}%)`, fill: outside ? T.ink.primary : T.ink.muted, fontSize: 12, fontWeight: outside ? 600 : 400 } }]
+    : [];
+
+  return {
+    ...b,
+    // 범례가 오른쪽 위 '범위 밖' 문구와 겹치지 않도록 폭 제한 (넘치면 스크롤)
+    legend: legend ? { ...b.legend, type: 'scroll', width: Math.max(120, (size?.width || 400) - (hasSpec ? 200 : 24)), data: groups.map(([g]) => g) } : b.legend,
+    graphic,
+    tooltip: {
+      ...b.tooltip,
+      trigger: 'item',
+      formatter: (p: any) => {
+        const c = p.data?.centroid;
+        if (c)
+          return `${p.seriesName} · 평균 중심 (${c.n.toLocaleString()}개)<br/>${cfg.x}: <b>${round(p.value[0])}</b> ± ${round(c.sdx)}<br/>${yName}: <b>${round(p.value[1])}</b> ± ${round(c.sdy)}`;
+        const v = p.value as Pt;
+        const off = hasSpec && !inSpec(v[0], v[1]) ? '<br/><b>허용 범위 밖</b>' : '';
+        return `${p.seriesName}<br/>${tipLine(cfg, v[2])}${cfg.x}: <b>${round(v[0])}</b><br/>${yName}: <b>${round(v[1])}</b>${off}`;
+      },
+    },
+    grid,
+    xAxis,
+    yAxis,
+    series,
   };
 }
 
@@ -355,7 +575,9 @@ function pie(cfg: ChartConfig, d: FramePayload) {
 export function neededColumns(w: { type: string; chart?: ChartConfig; stat?: { column?: string }; table?: { columns?: string[] } }): string[] {
   if (w.type === 'chart' && w.chart) {
     if (w.chart.kind === 'heatmap' && !w.chart.y?.length) return [];
-    return [w.chart.x, ...(w.chart.y ?? []), w.chart.series].filter(Boolean) as string[];
+    const ys = w.chart.kind === 'xy' ? (w.chart.y ?? []).slice(0, 1) : w.chart.y ?? [];
+    const tip = w.chart.kind === 'scatter' || w.chart.kind === 'xy' ? w.chart.tip : undefined;
+    return [...new Set([w.chart.x, ...ys, w.chart.series, tip].filter(Boolean) as string[])];
   }
   if (w.type === 'stat') return w.stat?.column ? [w.stat.column] : [];
   if (w.type === 'table') return w.table?.columns ?? [];

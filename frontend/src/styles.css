@@ -397,7 +397,6 @@ code {
 
 /* ---------- page ---------- */
 .page {
-  max-width: 1360px;
   margin: 0 auto;
   padding: 28px 32px 48px;
 }
@@ -853,6 +852,50 @@ code {
 }
 .editing .dash-widget {
   outline: 1px dashed var(--line);
+}
+.dash-widget-source {
+  box-shadow: 0 0 0 2px var(--blue);
+}
+.dash-selection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 8px 8px 14px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  background: var(--blue-soft);
+  color: var(--text-1);
+  font-size: 13px;
+}
+.dash-selection > .anticon {
+  color: var(--blue);
+}
+.dash-selection > button {
+  margin-left: auto;
+}
+.grid-selectable .ant-table-tbody > tr {
+  cursor: pointer;
+}
+.ant-table-wrapper .ant-table-tbody > tr.row-selected > td {
+  background: var(--blue-soft);
+}
+.ant-table-wrapper .ant-table-tbody > tr.row-selected > td:first-child {
+  box-shadow: inset 3px 0 0 var(--blue);
+}
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.layer-box {
+  padding: 12px 12px 4px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  background: var(--tile-2);
+}
+.layer-map {
+  padding-bottom: 10px;
 }
 .editing .dash-widget-head {
   cursor: move;

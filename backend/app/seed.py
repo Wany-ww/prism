@@ -61,6 +61,22 @@ EOL_PARSER = '''def parse(path, ctx):
 # Neo4j 가 설정되지 않은 환경에서는 이 노드만 실행 시 오류로 표시되고 나머지 Flow 는 정상 동작한다.
 GRAPH_PARAMS = {"name": "product_trace", "product_key": "drive.VAID", "resources": "blade.Tray No=Tray\ndrive.QRCODE=Tray"}
 
+# 데모 대시보드: 제품 테이블에서 VAID 를 클릭하면 핀 위치 분포에서 강조되고 공정 이력이 그 제품으로 좁혀짐
+DEMO_SELECTION_WIDGETS = [
+    {"i": "w11", "x": 0, "y": 28, "w": 5, "h": 11, "type": "table", "title": "제품 목록 — 클릭해서 선택", "dataset": "pin_area_data",
+     "table": {"columns": ["VAID", "blade_machine", "drive_machine", "F14 Area", "F1440 Area"], "pageSize": 10}, "select": {"column": "VAID"}},
+    {"i": "w12", "x": 5, "y": 28, "w": 4, "h": 11, "type": "chart", "title": "Base pin 위치 분포", "dataset": "pin_area_data",
+     "chart": {"kind": "xy", "x": "base_pin_x", "y": ["base_pin_y"], "series": "blade_machine", "tip": "VAID",
+               "spec": {"shape": "circle", "cx": 12.5, "cy": 8.2, "r": 0.03}}},
+    {"i": "w13", "x": 9, "y": 28, "w": 3, "h": 11, "type": "chart", "title": "Rotate pin 위치 분포", "dataset": "pin_area_data",
+     "chart": {"kind": "xy", "x": "rotate_pin_x", "y": ["rotate_pin_y"], "tip": "VAID",
+               "spec": {"shape": "rect", "cx": 5.75, "cy": 3.1, "dx": 0.025, "dy": 0.025}}},
+    {"i": "w14", "x": 0, "y": 39, "w": 12, "h": 7, "type": "table", "title": "선택 제품의 공정 이력", "dataset": "product_trace",
+     "table": {"columns": ["drive.VAID", "blade._equipment", "blade.Tray No", "blade.Tray Position", "drive._equipment", "drive.QRCODE",
+                           "drive.Position No", "drive.F14 Area", "eol._equipment", "eol.F1440 Area"], "pageSize": 10},
+     "link": {"mode": "column", "column": "drive.VAID"}},
+]
+
 
 def _node(nid, kind, label, x, y, params=None, node_type=None):
     data = {"kind": kind, "label": label, "params": params or {}}
@@ -165,7 +181,12 @@ def seed_demo(db) -> bool:
         {"i": "w8", "x": 6, "y": 12, "w": 6, "h": 8, "type": "chart", "title": "시간별 평균 Area 추이", "dataset": "area_hourly_trend", "chart": {"kind": "line", "x": "hour", "y": ["F14 Area", "F1440 Area"]}},
         {"i": "w9", "x": 0, "y": 20, "w": 6, "h": 8, "type": "table", "title": "회귀 요약", "dataset": "pin_area_regression", "table": {"columns": [], "pageSize": 10}},
         {"i": "w10", "x": 6, "y": 20, "w": 6, "h": 8, "type": "chart", "title": "F14 Area 분포 (Blade 설비별)", "dataset": "pin_area_data", "chart": {"kind": "histogram", "x": "F14 Area", "y": [], "series": "blade_machine", "bins": 30}},
+        *DEMO_SELECTION_WIDGETS,
     ]
+    # KPI·분포 위젯은 선택에 따라 바뀌지 않도록
+    for w in widgets:
+        if w["i"] in ("w1", "w2", "w3", "w4", "w10"):
+            w["link"] = {"mode": "off"}
     db.add(Dashboard(name="핀 위치 ↔ Area 상관성", description="데모 대시보드", refresh_sec=60, layout={"widgets": widgets}))
     db.commit()
     return True
