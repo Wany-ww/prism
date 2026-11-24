@@ -47,15 +47,15 @@ export default function ParserEditor({ value, equipment, defaultEquipmentId, cod
   }, []);
 
   const save = useCallback(async () => {
-    if (!cur.name?.trim()) return message.warning('Parser 이름을 입력하세요.');
-    if (!cur.code?.includes('def parse')) return message.warning('코드에 def parse(path, ctx) 함수가 있어야 합니다.');
+    if (!cur.name?.trim()) return message.warning('Enter a parser name.');
+    if (!cur.code?.includes('def parse')) return message.warning('The code needs a def parse(path, ctx) function.');
     setSaving(true);
     try {
       const body = { name: cur.name.trim(), description: cur.description ?? '', code: cur.code ?? '' };
       const saved: Parser = cur.id ? await api.put(`/api/parsers/${cur.id}`, body) : await api.post('/api/parsers', body);
       setCur(saved);
       setDirty(false);
-      message.success(cur.id ? '저장했어요. 이 Parser를 쓰는 설비는 다음 수집 때 다시 파싱돼요.' : `'${saved.name}' Parser를 추가했어요.`);
+      message.success(cur.id ? 'Saved. Equipment using this parser is re-parsed on its next capture.' : `Added parser [${saved.name}].`);
       onSaved(saved);
     } catch (e: any) {
       message.error(e.message);
@@ -77,7 +77,7 @@ export default function ParserEditor({ value, equipment, defaultEquipmentId, cod
 
   const remove = async () => {
     await api.del(`/api/parsers/${cur.id}`);
-    message.success(`'${cur.name}' Parser를 삭제했어요.`);
+    message.success(`Deleted parser [${cur.name}].`);
     onDeleted(cur.id!);
   };
 
@@ -104,15 +104,15 @@ export default function ParserEditor({ value, equipment, defaultEquipmentId, cod
     <Space direction="vertical" style={{ width: '100%' }} size={12}>
       <div className="panel">
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
-          <Input value={cur.name} placeholder="Parser 이름 (필수)" status={!cur.name?.trim() ? 'warning' : undefined} onChange={(e) => upd({ name: e.target.value })} style={{ width: 240, fontWeight: 600 }} />
-          <Input value={cur.description} placeholder="설명" onChange={(e) => upd({ description: e.target.value })} style={{ flex: 1, minWidth: 200 }} />
-          {dirty && <Tag color="orange">저장 안 됨</Tag>}
+          <Input value={cur.name} placeholder="Parser name (required)" status={!cur.name?.trim() ? 'warning' : undefined} onChange={(e) => upd({ name: e.target.value })} style={{ width: 240, fontWeight: 600 }} />
+          <Input value={cur.description} placeholder="Description" onChange={(e) => upd({ description: e.target.value })} style={{ flex: 1, minWidth: 200 }} />
+          {dirty && <Tag color="orange">Unsaved</Tag>}
           <Button type="primary" icon={<SaveOutlined />} onClick={save} loading={saving} disabled={!dirty}>
-            {cur.id ? '저장' : '추가'}
+            {cur.id ? 'Save' : 'Add'}
           </Button>
           {cur.id && onDuplicate && (
-            <Button icon={<CopyOutlined />} onClick={() => onDuplicate({ name: `${cur.name} (복사)`, description: cur.description, code: cur.code })}>
-              복제
+            <Button icon={<CopyOutlined />} onClick={() => onDuplicate({ name: `${cur.name} (copy)`, description: cur.description, code: cur.code })}>
+              Duplicate
             </Button>
           )}
           {cur.id && (
@@ -121,18 +121,18 @@ export default function ParserEditor({ value, equipment, defaultEquipmentId, cod
               icon={<DeleteOutlined />}
               onClick={() =>
                 modal.confirm({
-                  title: `'${cur.name}' Parser를 삭제할까요?`,
+                  title: `Delete parser [${cur.name}]?`,
                   content: users.length
-                    ? `사용 중인 설비 ${users.length}대(${users.map((u) => u.name).join(', ')})는 Parser 미지정 상태가 되어 수집이 멈춰요.`
+                    ? `사용 중인 설비 ${users.length}대(${users.map((u) => `[${u.name}]`).join(', ')})는 Parser 미지정 상태가 되어 수집이 멈춰요.`
                     : '사용 중인 설비는 없어요.',
-                  okText: '삭제',
+                  okText: 'Delete',
                   okButtonProps: { danger: true },
-                  cancelText: '취소',
+                  cancelText: 'Cancel',
                   onOk: remove,
                 })
               }
             >
-              삭제
+              Delete
             </Button>
           )}
         </div>
@@ -140,7 +140,7 @@ export default function ParserEditor({ value, equipment, defaultEquipmentId, cod
           <code>def parse(path, ctx)</code> 가 DataFrame(또는 list[dict])을 반환하면 각 행이 레코드로 저장돼요. <code>_ts</code> 컬럼은 레코드 시각이 됩니다.
           {cur.id && (
             <>
-              {' '}· 사용 설비 {users.length ? users.map((u) => u.name).join(', ') : '없음'} · 수정 {fmtTime(cur.updated_at)} · Ctrl+S 저장
+              {' '}· Used by {users.length ? users.map((u) => `[${u.name}]`).join(', ') : 'none'} · Updated {fmtTime(cur.updated_at)} · Ctrl+S to save
             </>
           )}
         </Typography.Paragraph>
@@ -150,16 +150,16 @@ export default function ParserEditor({ value, equipment, defaultEquipmentId, cod
       <div className="panel">
         <div className="panel-title">
           <span>
-            테스트 <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>저장하지 않고 샘플 파일로 실행</span>
+            Test <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>저장하지 않고 샘플 파일로 실행</span>
           </span>
           <Button type="primary" ghost icon={<CaretRightOutlined />} onClick={run} loading={running}>
-            실행
+            Run
           </Button>
         </div>
         <Space wrap style={{ marginBottom: 10 }}>
           <Select
             allowClear
-            placeholder="설비 (인코딩/옵션/최신 파일 사용)"
+            placeholder="Equipment (uses its encoding, options, latest file)"
             style={{ width: 240 }}
             value={test.equipment_id}
             options={equipment.map((e) => ({ value: e.id, label: e.name }))}
@@ -167,7 +167,7 @@ export default function ParserEditor({ value, equipment, defaultEquipmentId, cod
           />
           <Input
             className="mono"
-            placeholder="서버에서 읽을 파일 경로"
+            placeholder="File path on the server"
             style={{ width: 380 }}
             value={test.server_path}
             onChange={(e) => setTest((t) => ({ ...t, server_path: e.target.value, file: null }))}
@@ -181,7 +181,7 @@ export default function ParserEditor({ value, equipment, defaultEquipmentId, cod
             onRemove={() => setTest((t) => ({ ...t, file: null }))}
             fileList={test.file ? [{ uid: '1', name: test.file.name }] : []}
           >
-            <Button icon={<UploadOutlined />}>샘플 파일 업로드</Button>
+            <Button icon={<UploadOutlined />}>Upload sample file</Button>
           </Upload>
         </Space>
         {result && !result.ok && (
@@ -193,15 +193,15 @@ export default function ParserEditor({ value, equipment, defaultEquipmentId, cod
         {result?.ok && (
           <>
             <Space style={{ marginBottom: 6 }} wrap>
-              <Tag color="blue">{result.preview.row_count.toLocaleString()} 행</Tag>
-              <Tag>{result.preview.columns.length} 컬럼</Tag>
+              <Tag color="blue">{result.preview.row_count.toLocaleString()} rows</Tag>
+              <Tag>{result.preview.columns.length} columns</Tag>
               <Tag>{result.elapsed_ms} ms</Tag>
               {result.has_ts ? (
                 <Tag color="green">
                   _ts: {fmtTime(result.ts_min)} ~ {fmtTime(result.ts_max)}
                 </Tag>
               ) : (
-                <Tag color="orange">_ts 없음 → 파일 수정시각 사용</Tag>
+                <Tag color="orange">No _ts → using file modified time</Tag>
               )}
             </Space>
             <DataGrid data={result.preview} height={280} />

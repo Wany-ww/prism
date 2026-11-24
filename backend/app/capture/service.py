@@ -31,7 +31,7 @@ def parser_hash(eq: Equipment) -> str:
 
 def parser_fn(eq: Equipment):
     if eq.parser is None:
-        raise CaptureError("Parser가 지정되지 않았습니다.")
+        raise CaptureError("No parser is assigned.")
     return load_function(eq.parser.code, "parse", f"parser:{eq.parser.name}")
 
 
@@ -129,12 +129,12 @@ def _finish(db, eq: Equipment, run: CaptureRun, status: str, message: str):
 def run_capture(equipment_id: int, trigger: str = "schedule") -> dict:
     lock = equipment_lock(equipment_id)
     if not lock.acquire(blocking=False):
-        return {"status": "busy", "message": "이미 수집 중입니다."}
+        return {"status": "busy", "message": "Already capturing."}
     try:
         with SessionLocal() as db:
             eq = db.get(Equipment, equipment_id)
             if eq is None:
-                return {"status": "error", "message": "설비 없음"}
+                return {"status": "error", "message": "Equipment not found"}
             run = CaptureRun(equipment_id=eq.id, trigger=trigger)
             db.add(run)
             eq.status = "running"
@@ -165,7 +165,7 @@ def run_capture(equipment_id: int, trigger: str = "schedule") -> dict:
                             errors.append(f"{rf.path}: {msg}")
                             _mark_file_error(db, eq, rf.path, rf.size, rf.mtime, msg)
                 status = "ok" if not errors else ("warning" if run.files_parsed else "error")
-                msg = f"발견 {run.files_found} / 처리 {run.files_parsed} / {run.rows}행"
+                msg = f"found {run.files_found} / parsed {run.files_parsed} / {run.rows} rows"
                 if errors:
                     msg += "\n" + "\n".join(errors[:20])
                 _finish(db, eq, run, status, msg)
@@ -194,7 +194,7 @@ def ingest_uploaded(equipment_id: int, local_path: str, source_path: str, size: 
             try:
                 n = ingest_file(db, eq, local_path, source_path, size, mtime)
                 run.files_parsed, run.rows = 1, n
-                _finish(db, eq, run, "ok", f"{source_path}: {n}행")
+                _finish(db, eq, run, "ok", f"[{source_path}] {n} rows")
                 return {"status": "ok", "rows": n}
             except Exception as e:
                 db.rollback()

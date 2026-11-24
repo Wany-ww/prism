@@ -17,12 +17,12 @@ class NodeError(Exception):
 def _ts_column(df: pd.DataFrame, explicit: str | None) -> str:
     if explicit:
         if explicit not in df.columns:
-            raise NodeError(f"시간 컬럼 '{explicit}' 이 없습니다.")
+            raise NodeError(f"Time column '{explicit}' does not exist.")
         return explicit
     for c in df.columns:
         if str(c) == "_ts" or str(c).endswith("._ts"):
             return c
-    raise NodeError("시간 컬럼(_ts)을 찾을 수 없습니다. 시간 컬럼을 직접 지정하세요.")
+    raise NodeError("No time column (_ts) found. Set the time column explicitly.")
 
 
 def _norm_value(v, upper: bool):
@@ -49,7 +49,7 @@ def _key_series(s: pd.Series, normalize: bool, upper: bool, side: str) -> pd.Ser
 def node_source(ctx, params: dict, inputs: list[pd.DataFrame]) -> pd.DataFrame:
     ids = [int(i) for i in (params.get("equipment_ids") or [])]
     if not ids:
-        raise NodeError("설비를 1개 이상 선택하세요.")
+        raise NodeError("Select at least one piece of equipment.")
     since = until = None
     if params.get("days"):
         since = datetime.now() - timedelta(days=float(params["days"]))
@@ -70,16 +70,16 @@ def node_source(ctx, params: dict, inputs: list[pd.DataFrame]) -> pd.DataFrame:
 
 def node_match(ctx, params: dict, inputs: list[pd.DataFrame]) -> pd.DataFrame:
     if len(inputs) < 2:
-        raise NodeError("Match 노드는 왼쪽/오른쪽 입력이 모두 연결되어야 합니다.")
+        raise NodeError("A Match node needs both left and right inputs connected.")
     left, right = inputs[0].copy(), inputs[1].copy()
     keys = [k for k in (params.get("keys") or []) if k.get("left") and k.get("right")]
     if not keys:
-        raise NodeError("매칭 키를 1개 이상 지정하세요.")
+        raise NodeError("Set at least one match key.")
     for k in keys:
         if k["left"] not in left.columns:
-            raise NodeError(f"왼쪽 입력에 '{k['left']}' 컬럼이 없습니다.")
+            raise NodeError(f"Left input has no column '{k['left']}'.")
         if k["right"] not in right.columns:
-            raise NodeError(f"오른쪽 입력에 '{k['right']}' 컬럼이 없습니다.")
+            raise NodeError(f"Right input has no column '{k['right']}'.")
     normalize = params.get("normalize", True)
     upper = params.get("ignore_case", False)
     how = params.get("how", "inner")
@@ -99,7 +99,7 @@ def node_match(ctx, params: dict, inputs: list[pd.DataFrame]) -> pd.DataFrame:
     else:
         direction = {"nearest_after": "forward", "nearest_before": "backward", "nearest": "nearest"}.get(strategy)
         if direction is None:
-            raise NodeError(f"알 수 없는 매칭 방식: {strategy}")
+            raise NodeError(f"Unknown match strategy: {strategy}")
         lt = _ts_column(left, params.get("left_time"))
         rt = _ts_column(right, params.get("right_time"))
         left["__lt"] = pd.to_datetime(left[lt], errors="coerce")
@@ -131,14 +131,14 @@ def node_match(ctx, params: dict, inputs: list[pd.DataFrame]) -> pd.DataFrame:
 
 def node_union(ctx, params: dict, inputs: list[pd.DataFrame]) -> pd.DataFrame:
     if not inputs:
-        raise NodeError("입력이 없습니다.")
+        raise NodeError("No input.")
     return pd.concat(inputs, ignore_index=True, sort=False)
 
 
 def node_dataset(ctx, params: dict, inputs: list[pd.DataFrame]) -> pd.DataFrame:
     name = (params.get("name") or "").strip()
     if not name:
-        raise NodeError("데이터셋을 선택하세요.")
+        raise NodeError("Select a dataset.")
     try:
         return load_dataset(ctx.db, name)
     except KeyError as e:
@@ -147,11 +147,11 @@ def node_dataset(ctx, params: dict, inputs: list[pd.DataFrame]) -> pd.DataFrame:
 
 def node_output(ctx, params: dict, inputs: list[pd.DataFrame]) -> pd.DataFrame:
     if not inputs:
-        raise NodeError("입력이 연결되지 않았습니다.")
+        raise NodeError("No input is connected.")
     df = inputs[0]
     name = (params.get("name") or "").strip()
     if not name:
-        raise NodeError("출력 데이터셋 이름을 지정하세요.")
+        raise NodeError("Set the output dataset name.")
     if ctx.save:
         save_dataset(ctx.db, name, df, ctx.flow_id, ctx.current_node)
     return df
@@ -169,16 +169,16 @@ def node_graph(ctx, params: dict, inputs: list[pd.DataFrame]) -> pd.DataFrame:
     from .. import graph
 
     if not inputs:
-        raise NodeError("입력이 연결되지 않았습니다.")
+        raise NodeError("No input is connected.")
     df = inputs[0]
     name = (params.get("name") or "").strip()
     key = (params.get("product_key") or "").strip()
     resources = graph.parse_resources(params.get("resources") or "")
     if not name:
-        raise NodeError("그래프 이름을 지정하세요.")
+        raise NodeError("Set the graph name.")
     missing = [c for c in [key] + [c for c, _ in resources] if c and c not in df.columns]
     if missing:
-        raise NodeError(f"입력에 없는 컬럼: {', '.join(missing)}")
+        raise NodeError(f"Columns missing from input: {', '.join(missing)}")
     if ctx.save and graph.enabled():
         try:
             graph.export_graph(name, df, key, resources)
@@ -193,7 +193,7 @@ def node_cypher(ctx, params: dict, inputs: list[pd.DataFrame]) -> pd.DataFrame:
 
     query = (params.get("query") or "").strip()
     if not query:
-        raise NodeError("Cypher 쿼리를 입력하세요.")
+        raise NodeError("Enter a Cypher query.")
     qp = dict(params.get("params") or {})
     if inputs:
         qp["rows"] = [{k: graph._clean(v) for k, v in r.items()} for r in inputs[0].head(10000).to_dict("records")]

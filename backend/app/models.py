@@ -121,7 +121,7 @@ class NodeType(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     key: Mapped[str] = mapped_column(String(100), unique=True)
     name: Mapped[str] = mapped_column(String(200))
-    category: Mapped[str] = mapped_column(String(50), default="변환")
+    category: Mapped[str] = mapped_column(String(50), default="Transform")
     description: Mapped[str] = mapped_column(Text, default="")
     color: Mapped[str] = mapped_column(String(20), default="#a234c7")
     inputs: Mapped[int] = mapped_column(Integer, default=1)

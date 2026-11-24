@@ -14,7 +14,7 @@ function groupRow(data: FramePayload, row: unknown[]): Group[] {
   const idx: Record<string, Group> = {};
   data.columns.forEach((c, i) => {
     const dot = c.name.indexOf('.');
-    const g = dot > 0 ? c.name.slice(0, dot) : '기타';
+    const g = dot > 0 ? c.name.slice(0, dot) : 'Other';
     const field = dot > 0 ? c.name.slice(dot + 1) : c.name;
     if (!idx[g]) groups.push((idx[g] = { name: g, fields: [] }));
     if (field === '_ts') idx[g].ts = row[i];
@@ -88,27 +88,27 @@ export default function TracePage() {
       <div className="tile" style={{ padding: 20 }}>
         <Input
           size="large"
-          placeholder="VAID · QR · Tray No 로 제품을 찾아보세요"
+          placeholder="Find a product by VAID · QR · Tray No"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onPressEnter={() => search()}
           prefix={<SearchOutlined className="muted" />}
           suffix={
             <Button type="primary" onClick={() => search()}>
-              조회
+              Search
             </Button>
           }
           style={{ borderRadius: 14, border: 'none', padding: '8px 8px 8px 16px', fontSize: 16 }}
         />
         <Space wrap style={{ marginTop: 12 }}>
-          <Select style={{ width: 200 }} value={ds} onChange={setDs} options={datasets.map((d) => ({ value: d.name, label: d.name }))} placeholder="Match 결과 데이터셋" />
-          <Select allowClear showSearch style={{ width: 220 }} value={column} onChange={setColumn} placeholder="검색 컬럼 (전체)" options={cols.map((c) => ({ value: c, label: c }))} />
+          <Select style={{ width: 200 }} value={ds} onChange={setDs} options={datasets.map((d) => ({ value: d.name, label: d.name }))} placeholder="Match result dataset" />
+          <Select allowClear showSearch style={{ width: 220 }} value={column} onChange={setColumn} placeholder="Search column (all)" options={cols.map((c) => ({ value: c, label: c }))} />
           <div className="pill-tabs">
             <div className={`pill-tab ${mode === 'exact' ? 'active' : ''}`} style={{ background: mode === 'exact' ? 'var(--panel)' : undefined }} onClick={() => setMode('exact')}>
-              일치
+              Exact
             </div>
             <div className={`pill-tab ${mode === 'contains' ? 'active' : ''}`} style={{ background: mode === 'contains' ? 'var(--panel)' : undefined }} onClick={() => setMode('contains')}>
-              포함
+              Contains
             </div>
           </div>
           {keyCols.map((c) => (
@@ -122,12 +122,12 @@ export default function TracePage() {
       {res && (
         <div style={{ marginTop: 24 }}>
           {res.row_count === 0 ? (
-            <Empty description="일치하는 제품이 없어요" style={{ marginTop: 48 }} />
+            <Empty description="No matching products" style={{ marginTop: 48 }} />
           ) : (
             <>
               <div className="section-title" style={{ marginTop: 0 }}>
-                공정 이력
-                <small>{res.row_count}건 일치</small>
+                Process history
+                <small>{res.row_count} matches</small>
               </div>
               {res.row_count > 1 && (
                 <div className="pill-tabs" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
@@ -150,11 +150,11 @@ export default function TracePage() {
                       <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>
                         {g.equipment != null && (
                           <div>
-                            설비 <b style={{ color: 'var(--text-1)' }}>{String(g.equipment)}</b>
+                            Equipment <b style={{ color: 'var(--text-1)' }}>[{String(g.equipment)}]</b>
                           </div>
                         )}
                         {g.ts != null && <div className="num">{String(g.ts)}</div>}
-                        {g.equipment == null && g.ts == null && g.fields.every((f) => f.value == null) && <Typography.Text type="warning">이 공정 기록 없음</Typography.Text>}
+                        {g.equipment == null && g.ts == null && g.fields.every((f) => f.value == null) && <Typography.Text type="warning">No record for this step</Typography.Text>}
                       </div>
                       <div className="kv">
                         {g.fields.map((f) => (
@@ -180,7 +180,7 @@ export default function TracePage() {
                 />
               )}
               {graphMeta === undefined && gstat?.connected === false && gstat.enabled && (
-                <Alert type="warning" showIcon style={{ marginTop: 24 }} message="Neo4j 에 연결할 수 없어 영향 범위 분석을 표시하지 못했어요." description={gstat.error} />
+                <Alert type="warning" showIcon style={{ marginTop: 24 }} message="Can't reach Neo4j, so impact analysis isn't available." description={gstat.error} />
               )}
             </>
           )}

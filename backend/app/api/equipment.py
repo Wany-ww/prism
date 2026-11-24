@@ -93,7 +93,7 @@ def get_equipment(eq_id: int, db: Session = Depends(get_db)):
 @router.post("")
 def create_equipment(body: EquipmentIn, db: Session = Depends(get_db)):
     if db.scalar(select(Equipment).where(Equipment.name == body.name)):
-        raise HTTPException(409, "같은 이름의 설비가 있습니다.")
+        raise HTTPException(409, "Equipment with the same name already exists.")
     eq = Equipment()
     _apply(eq, body)
     db.add(eq)
@@ -107,7 +107,7 @@ def update_equipment(eq_id: int, body: EquipmentIn, db: Session = Depends(get_db
     eq = get_or_404(db, Equipment, eq_id)
     dup = db.scalar(select(Equipment).where(Equipment.name == body.name, Equipment.id != eq_id))
     if dup:
-        raise HTTPException(409, "같은 이름의 설비가 있습니다.")
+        raise HTTPException(409, "Equipment with the same name already exists.")
     _apply(eq, body)
     db.commit()
     db.refresh(eq)
@@ -157,9 +157,9 @@ def _delete(db, ids: list[int]) -> dict:
     """설비 삭제: 수집 파일·레코드·수집 이력은 함께 삭제되고, Flow 의 설비 데이터 노드에서는 선택이 해제된다."""
     eqs = db.scalars(select(Equipment).where(Equipment.id.in_(ids))).all()
     if not eqs:
-        raise HTTPException(404, "설비 없음")
+        raise HTTPException(404, "Equipment not found")
     if any(is_running(e.id) for e in eqs):
-        raise HTTPException(409, "수집 중인 설비가 있습니다. 잠시 후 다시 시도하세요.")
+        raise HTTPException(409, "Some equipment is capturing right now. Try again shortly.")
     gone = {e.id for e in eqs}
     # SQLite 는 대량 cascade 가 느리므로 레코드부터 명시적으로 삭제
     db.execute(delete(Record).where(Record.equipment_id.in_(gone)))
@@ -212,9 +212,9 @@ def probe(body: ProbeIn, db: Session = Depends(get_db)):
     try:
         if cfg.access_method == "agent":
             locations = [{"dir": d, "pattern": p} for d, p in candidate_locations(cfg)]
-            msg = "Agent 방식: 게이트웨이 PC 기준 경로입니다."
+            msg = "Agent method: paths are on the gateway PC."
             if cfg.folder_mode == "date":
-                msg += " 날짜 폴더는 에이전트가 게이트웨이 PC 에서 찾습니다."
+                msg += " The agent finds dated folders on the gateway PC."
             return {"ok": True, "locations": locations[-1:] if cfg.folder_mode == "date" else locations, "files": [], "message": msg}
         with open_fetcher(cfg) as f:
             locations = [{"dir": d, "pattern": p} for d, p in resolve_locations(f, cfg)]
@@ -222,7 +222,7 @@ def probe(body: ProbeIn, db: Session = Depends(get_db)):
         if cfg.folder_mode == "date" and not locations:
             return {
                 "ok": False,
-                "error": f"'{cfg.log_path}' 아래에서 최근 {cfg.lookback_days + 1}일 날짜 폴더를 찾지 못했습니다. 상위 폴더 경로와 조회 일수를 확인하세요.",
+                "error": f"No dated folders for the last {cfg.lookback_days + 1} day(s) under [{cfg.log_path}]. Check the root folder path and lookback days.",
                 "locations": [],
             }
     except CaptureError as e:

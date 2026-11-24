@@ -438,8 +438,8 @@ code {
   color: var(--text-3);
 }
 .big-tab.active {
-  color: var(--text-1);
-  border-bottom-color: var(--text-1);
+  color: var(--blue);
+  border-bottom-color: var(--blue);
 }
 .big-tab .hint {
   font-size: 12px;
@@ -1028,4 +1028,10 @@ body.resizing-row .flow-canvas {
   color: var(--text-3);
   font-size: 12px;
   margin-top: 2px;
+}
+
+/* 설비 편집 창의 섹션 구분선 (Basic Information / Log Capture): 기본보다 진하게 */
+.section-divider.ant-divider-horizontal.ant-divider-with-text::before,
+.section-divider.ant-divider-horizontal.ant-divider-with-text::after {
+  border-block-start-color: var(--text-4);
 }

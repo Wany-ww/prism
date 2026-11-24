@@ -38,18 +38,18 @@ export default function DatasetsPage() {
         onRow={(r) => ({ onClick: () => setSel(r), style: { cursor: 'pointer', background: sel?.id === r.id ? 'var(--blue-soft)' : undefined } })}
         columns={[
           { title: '', width: 50, render: (_, __, i) => <span className="rank">{i + 1}</span> },
-          { title: '데이터셋', dataIndex: 'name', render: (v) => <b>{v}</b> },
-          { title: '생성 Flow', dataIndex: 'flow_name', render: (v) => <span className="muted">{v}</span> },
-          { title: '행', dataIndex: 'row_count', align: 'right', className: 'num', render: (v) => v.toLocaleString() },
-          { title: '컬럼', dataIndex: 'columns', align: 'right', className: 'num', render: (c: any[]) => c.length },
-          { title: '갱신', dataIndex: 'updated_at', align: 'right', className: 'num', render: fmtTime },
+          { title: 'Dataset', dataIndex: 'name', render: (v) => <b>{v}</b> },
+          { title: 'Source flow', dataIndex: 'flow_name', render: (v) => <span className="muted">{v}</span> },
+          { title: 'Rows', dataIndex: 'row_count', align: 'right', className: 'num', render: (v) => v.toLocaleString() },
+          { title: 'Columns', dataIndex: 'columns', align: 'right', className: 'num', render: (c: any[]) => c.length },
+          { title: 'Updated', dataIndex: 'updated_at', align: 'right', className: 'num', render: fmtTime },
           {
             title: '',
             width: 100,
             render: (_, d) => (
               <Space size={2} onClick={(e) => e.stopPropagation()}>
                 <Button type="text" icon={<DownloadOutlined />} href={`/api/datasets/${encodeURIComponent(d.name)}/csv`} />
-                <Popconfirm title="삭제할까요? (Flow 를 다시 실행하면 재생성)" onConfirm={() => api.del(`/api/datasets/${d.id}`).then(() => { setSel(null); load(); })}>
+                <Popconfirm title="Delete this dataset?" description="Flow 를 다시 실행하면 재생성돼요." onConfirm={() => api.del(`/api/datasets/${d.id}`).then(() => { setSel(null); load(); })}>
                   <Button type="text" danger icon={<DeleteOutlined />} />
                 </Popconfirm>
               </Space>
@@ -61,7 +61,7 @@ export default function DatasetsPage() {
         <>
           <div className="section-title">
             {sel.name}
-            <small>상위 1,000행 · 전체 {sel.row_count.toLocaleString()}행</small>
+            <small>Top 1,000 rows · {sel.row_count.toLocaleString()} total</small>
           </div>
           <div className="tile" style={{ padding: 8 }}>
             <DataGrid data={data} height="calc(100vh - 480px)" pageSize={100} />

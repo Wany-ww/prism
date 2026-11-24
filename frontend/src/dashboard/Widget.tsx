@@ -195,13 +195,13 @@ export default function WidgetView({
   if (w.type === 'text') {
     body = <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', margin: 4, color: 'var(--text-2)' }}>{w.text?.content}</Typography.Paragraph>;
   } else if (!w.dataset) {
-    body = <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="데이터셋을 지정하세요" />;
+    body = <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Choose a dataset" />;
   } else if (err) {
     body = <Typography.Text type="danger" style={{ fontSize: 12 }}>{err}</Typography.Text>;
   } else if (!data) {
     body = <Spin style={{ margin: 24 }} />;
   } else if (linked && behavior === 'filter' && !data.rows.length) {
-    body = <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="선택한 값의 데이터가 없어요" />;
+    body = <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No data for the selected value" />;
   } else if (w.type === 'chart' && option) {
     body = <ReactECharts option={option} notMerge lazyUpdate style={{ height: '100%', width: '100%' }} />;
   } else if (w.type === 'table') {
@@ -213,7 +213,7 @@ export default function WidgetView({
             size="small"
             allowClear
             prefix={<SearchOutlined style={{ color: 'var(--text-4)' }} />}
-            placeholder={`검색 후 행을 클릭하면 ${selCol} 로 다른 위젯이 바뀌어요`}
+            placeholder={`Search, then click a row to filter other widgets by ${selCol}`}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             style={{ marginBottom: 6 }}
@@ -232,7 +232,7 @@ export default function WidgetView({
   } else if (w.type === 'stat' && w.stat) {
     const v = computeStat(data, w.stat);
     const txt = typeof v === 'number' ? v.toLocaleString(undefined, { maximumFractionDigits: w.stat.decimals ?? 0, minimumFractionDigits: w.stat.agg === 'count' || w.stat.agg === 'distinct' ? 0 : w.stat.decimals ?? 0 }) : String(v ?? '-');
-    const aggName: Record<string, string> = { count: '개수', distinct: '고유 개수', mean: '평균', sum: '합계', min: '최소', max: '최대', last: '마지막 값' };
+    const aggName: Record<string, string> = { count: 'Count', distinct: 'Distinct', mean: 'Mean', sum: 'Sum', min: 'Min', max: 'Max', last: 'Last value' };
     body = (
       <div style={{ padding: '2px 6px' }}>
         <div className="stat-value num">
@@ -241,20 +241,20 @@ export default function WidgetView({
           <span style={{ fontSize: 16, color: 'var(--text-2)', fontWeight: 500, marginLeft: 2 }}>{w.stat.suffix}</span>
         </div>
         <div className="stat-sub">
-          {aggName[w.stat.agg ?? 'count']} · {w.stat.column ?? '행'} · {widgetSources(w).map((s) => s.label).join(' + ')}
+          {aggName[w.stat.agg ?? 'count']} · {w.stat.column ?? 'rows'} · {widgetSources(w).map((s) => s.label).join(' + ')}
         </div>
       </div>
     );
   }
 
-  const selText = selection ? (selection.values.length > 1 ? `${selection.values[0]} 외 ${selection.values.length - 1}` : selection.values[0]) : '';
+  const selText = selection ? (selection.values.length > 1 ? `${selection.values[0]} +${selection.values.length - 1}` : selection.values[0]) : '';
   return (
     <div className={`dash-widget${isSource ? ' dash-widget-source' : ''}`}>
       <div className="dash-widget-head drag-handle">
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: w.type === 'stat' ? 13 : undefined, fontWeight: w.type === 'stat' ? 500 : undefined, color: w.type === 'stat' ? 'var(--text-2)' : undefined }}>
           <span className="ellipsis">{w.title}</span>
           {linked && (
-            <Tooltip title={`${selection!.column} = ${selection!.values.join(', ')} ${behavior === 'filter' ? '인 행만 표시' : '인 점을 강조'}`}>
+            <Tooltip title={`${selection!.column} = ${selection!.values.join(', ')} ${behavior === 'filter' ? '· showing only these rows' : '· highlighting these points'}`}>
               <Tag bordered={false} color="blue" icon={behavior === 'filter' ? <FilterOutlined /> : <AimOutlined />} style={{ margin: 0, maxWidth: 180 }} className="ellipsis">
                 {selText}
               </Tag>
@@ -264,7 +264,7 @@ export default function WidgetView({
         </span>
         {editing && (
           <Space size={0} onMouseDown={(e) => e.stopPropagation()}>
-            <Tooltip title="편집">
+            <Tooltip title="Edit">
               <Button size="small" type="text" icon={<EditOutlined />} onClick={onEdit} />
             </Tooltip>
             <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={onDelete} />

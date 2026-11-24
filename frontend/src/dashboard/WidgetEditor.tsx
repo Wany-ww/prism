@@ -7,15 +7,15 @@ import type { Layer } from './link';
 import { canHighlight, Widget } from './Widget';
 
 const KINDS: { value: ChartKind; label: string }[] = [
-  { value: 'line', label: '선 (추이)' },
-  { value: 'area', label: '영역' },
-  { value: 'bar', label: '막대' },
-  { value: 'scatter', label: '산점도 (두 값의 상관)' },
-  { value: 'xy', label: '좌표 분포 (X·Y 위치)' },
-  { value: 'histogram', label: '히스토그램 (분포)' },
-  { value: 'box', label: '박스플롯' },
-  { value: 'heatmap', label: '히트맵 (행렬)' },
-  { value: 'pie', label: '도넛 (구성비)' },
+  { value: 'line', label: 'Line (trend)' },
+  { value: 'area', label: 'Area' },
+  { value: 'bar', label: 'Bar' },
+  { value: 'scatter', label: 'Scatter (correlation)' },
+  { value: 'xy', label: 'XY position' },
+  { value: 'histogram', label: 'Histogram (distribution)' },
+  { value: 'box', label: 'Box plot' },
+  { value: 'heatmap', label: 'Heatmap (matrix)' },
+  { value: 'pie', label: 'Donut (share)' },
 ];
 
 export default function WidgetEditor({ value, datasets, onOk, onCancel }: { value: Widget; datasets: Dataset[]; onOk: (w: Widget) => void; onCancel: () => void }) {
@@ -37,25 +37,25 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
   const isXY = w.type === 'chart' && kind === 'xy';
 
   return (
-    <Modal open width={760} title="위젯 설정" onOk={() => onOk(w)} onCancel={onCancel} okText="적용" destroyOnClose styles={{ body: { maxHeight: '72vh', overflowY: 'auto', paddingRight: 8 } }}>
+    <Modal open width={760} title="Widget settings" onOk={() => onOk(w)} onCancel={onCancel} okText="Apply" destroyOnClose styles={{ body: { maxHeight: '72vh', overflowY: 'auto', paddingRight: 8 } }}>
       <Form layout="vertical" size="middle">
         <Row gutter={12}>
           <Col span={14}>
-            <Form.Item label="제목">
+            <Form.Item label="Title">
               <Input value={w.title} onChange={(e) => setW({ ...w, title: e.target.value })} />
             </Form.Item>
           </Col>
           <Col span={10}>
-            <Form.Item label="종류">
+            <Form.Item label="Type">
               <Radio.Group
                 value={w.type}
                 optionType="button"
                 onChange={(e) => setW({ ...w, type: e.target.value })}
                 options={[
-                  { value: 'chart', label: '차트' },
-                  { value: 'table', label: '테이블' },
-                  { value: 'stat', label: '수치' },
-                  { value: 'text', label: '텍스트' },
+                  { value: 'chart', label: 'Chart' },
+                  { value: 'table', label: 'Table' },
+                  { value: 'stat', label: 'Stat' },
+                  { value: 'text', label: 'Text' },
                 ]}
               />
             </Form.Item>
@@ -65,18 +65,18 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
           <>
             <Row gutter={12}>
               <Col span={layers.length ? 15 : 24}>
-                <Form.Item label="데이터셋">
+                <Form.Item label="Dataset">
                   <Select
                     showSearch
                     value={w.dataset}
                     onChange={(v) => setW({ ...w, dataset: v })}
-                    options={datasets.map((d) => ({ value: d.name, label: `${d.name}  (${d.row_count.toLocaleString()}행)` }))}
+                    options={datasets.map((d) => ({ value: d.name, label: `${d.name}  (${d.row_count.toLocaleString()} rows)` }))}
                   />
                 </Form.Item>
               </Col>
               {layers.length > 0 && (
                 <Col span={9}>
-                  <Form.Item label="표시 이름">
+                  <Form.Item label="Label">
                     <Input placeholder={w.dataset} value={w.label} onChange={(e) => setW({ ...w, label: e.target.value })} />
                   </Form.Item>
                 </Col>
@@ -89,17 +89,17 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
                 <div key={i} className="layer-box">
                   <Row gutter={12} align="bottom">
                     <Col span={15}>
-                      <Form.Item label={`겹칠 데이터셋 ${i + 2}`} style={{ marginBottom: 8 }}>
+                      <Form.Item label={`Overlay dataset ${i + 2}`} style={{ marginBottom: 8 }}>
                         <Select
                           showSearch
                           value={l.dataset}
                           onChange={(v) => setLayer(i, { dataset: v, map: {} })}
-                          options={datasets.map((d) => ({ value: d.name, label: `${d.name}  (${d.row_count.toLocaleString()}행)` }))}
+                          options={datasets.map((d) => ({ value: d.name, label: `${d.name}  (${d.row_count.toLocaleString()} rows)` }))}
                         />
                       </Form.Item>
                     </Col>
                     <Col span={7}>
-                      <Form.Item label="표시 이름" style={{ marginBottom: 8 }}>
+                      <Form.Item label="Label" style={{ marginBottom: 8 }}>
                         <Input placeholder={l.dataset} value={l.label} onChange={(e) => setLayer(i, { label: e.target.value })} />
                       </Form.Item>
                     </Col>
@@ -112,7 +112,7 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
                   {l.dataset && used.length > 0 && (
                     <div className="layer-map">
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                        컬럼 대응 — 이름이 같으면 자동, 다르면 이 데이터셋의 컬럼을 고르세요
+                        Column mapping — 이름이 같으면 자동, 다르면 이 데이터셋의 컬럼을 고르세요
                       </Typography.Text>
                       {used.map((c) => {
                         const cur = l.map?.[c] || (names.has(c) ? c : undefined);
@@ -128,7 +128,7 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
                                 allowClear
                                 style={{ width: '100%' }}
                                 status={cur ? undefined : 'warning'}
-                                placeholder="없음 — 이 데이터셋에선 빈 값"
+                                placeholder="None (empty in this dataset)"
                                 value={cur}
                                 options={lcols}
                                 onChange={(v) => setLayer(i, { map: { ...l.map, [c]: v ?? '' } })}
@@ -143,7 +143,7 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
               );
             })}
             <Button size="small" icon={<PlusOutlined />} onClick={() => setW({ ...w, layers: [...layers, { dataset: w.dataset ?? '', map: {} }] })} style={{ marginBottom: 16 }}>
-              데이터셋 겹치기
+              Overlay dataset
             </Button>
             {layers.length > 0 && (
               <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: -8 }}>
@@ -154,18 +154,18 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
         )}
         {w.type === 'chart' && (
           <>
-            <Form.Item label="차트">
+            <Form.Item label="Chart">
               <Select value={kind} options={KINDS} onChange={(v) => setChart({ kind: v, ...(v === 'xy' ? { y: (chart.y ?? []).slice(0, 1) } : {}) })} />
             </Form.Item>
             {isXY ? (
               <Row gutter={12}>
                 <Col span={12}>
-                  <Form.Item label="X 좌표">
+                  <Form.Item label="X position">
                     <Select allowClear showSearch value={chart.x} options={numCols} onChange={(v) => setChart({ x: v })} />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item label="Y 좌표">
+                  <Form.Item label="Y position">
                     <Select allowClear showSearch value={chart.y?.[0]} options={numCols} onChange={(v) => setChart({ y: v ? [v] : [] })} />
                   </Form.Item>
                 </Col>
@@ -173,13 +173,13 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
             ) : (
               <Row gutter={12}>
                 <Col span={12}>
-                  <Form.Item label={kind === 'heatmap' ? '행 라벨 컬럼' : kind === 'box' ? '그룹 (X, 선택)' : kind === 'pie' ? '구분 컬럼' : kind === 'histogram' ? '값 컬럼' : 'X 축'}>
+                  <Form.Item label={kind === 'heatmap' ? 'Row label column' : kind === 'box' ? 'Group (X, optional)' : kind === 'pie' ? 'Category column' : kind === 'histogram' ? 'Value column' : 'X axis'}>
                     <Select allowClear showSearch value={chart.x} options={cols} onChange={(v) => setChart({ x: v })} />
                   </Form.Item>
                 </Col>
                 {kind !== 'histogram' && (
                   <Col span={12}>
-                    <Form.Item label={kind === 'heatmap' ? '값 컬럼 (비우면 숫자 전체)' : kind === 'pie' ? '값 (비우면 개수)' : 'Y 값'}>
+                    <Form.Item label={kind === 'heatmap' ? 'Value columns (empty = all numeric)' : kind === 'pie' ? 'Value (empty = count)' : 'Y values'}>
                       <Select mode="multiple" value={chart.y ?? []} options={numCols} maxCount={kind === 'pie' ? 1 : undefined} onChange={(v) => setChart({ y: v })} />
                     </Form.Item>
                   </Col>
@@ -189,53 +189,53 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
             <Row gutter={12}>
               {['line', 'area', 'bar', 'scatter', 'xy', 'histogram'].includes(kind) && (
                 <Col span={12}>
-                  <Form.Item label="시리즈 구분 (색상)" extra={isXY ? '예: 설비별로 색 구분' : 'Y 가 1개일 때 이 컬럼 값별로 나눠 표시'}>
+                  <Form.Item label="Series (color by)" extra={isXY ? '예: 설비별로 색 구분' : 'Y 가 1개일 때 이 컬럼 값별로 나눠 표시'}>
                     <Select allowClear showSearch value={chart.series} options={cols} onChange={(v) => setChart({ series: v })} />
                   </Form.Item>
                 </Col>
               )}
               {(kind === 'scatter' || isXY) && (
                 <Col span={12}>
-                  <Form.Item label="툴팁에 표시할 컬럼" extra="점에 마우스를 올리면 함께 보여줌 (예: VAID)">
+                  <Form.Item label="Tooltip column" extra="점에 마우스를 올리면 함께 보여줌 (예: VAID)">
                     <Select allowClear showSearch value={chart.tip} options={cols} onChange={(v) => setChart({ tip: v })} />
                   </Form.Item>
                 </Col>
               )}
               {['line', 'area', 'bar', 'pie'].includes(kind) && (
                 <Col span={6}>
-                  <Form.Item label="집계">
+                  <Form.Item label="Aggregate">
                     <Select
                       value={chart.agg ?? 'none'}
                       onChange={(v) => setChart({ agg: v })}
-                      options={['none', 'mean', 'sum', 'count', 'min', 'max'].map((a) => ({ value: a, label: a === 'none' ? '원본' : a }))}
+                      options={['none', 'mean', 'sum', 'count', 'min', 'max'].map((a) => ({ value: a, label: a === 'none' ? 'raw' : a }))}
                     />
                   </Form.Item>
                 </Col>
               )}
               {kind === 'bar' && (
                 <Col span={6}>
-                  <Form.Item label="정렬">
-                    <Select value={chart.sort ?? 'none'} onChange={(v) => setChart({ sort: v })} options={[{ value: 'none', label: '없음' }, { value: 'desc', label: '큰 값부터' }, { value: 'asc', label: '작은 값부터' }]} />
+                  <Form.Item label="Sort">
+                    <Select value={chart.sort ?? 'none'} onChange={(v) => setChart({ sort: v })} options={[{ value: 'none', label: 'None' }, { value: 'desc', label: 'Largest first' }, { value: 'asc', label: 'Smallest first' }]} />
                   </Form.Item>
                 </Col>
               )}
               {['line', 'area', 'bar'].includes(kind) && (
                 <Col span={6}>
-                  <Form.Item label="누적">
+                  <Form.Item label="Stacked">
                     <Switch checked={!!chart.stack} onChange={(v) => setChart({ stack: v })} />
                   </Form.Item>
                 </Col>
               )}
               {kind === 'scatter' && (
                 <Col span={6}>
-                  <Form.Item label="추세선">
+                  <Form.Item label="Trend line">
                     <Switch checked={!!chart.trendline} onChange={(v) => setChart({ trendline: v })} />
                   </Form.Item>
                 </Col>
               )}
               {kind === 'histogram' && (
                 <Col span={6}>
-                  <Form.Item label="구간 수">
+                  <Form.Item label="Bins">
                     <InputNumber min={2} max={200} value={chart.bins ?? 20} onChange={(v) => setChart({ bins: v ?? 20 })} />
                   </Form.Item>
                 </Col>
@@ -245,34 +245,34 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
               <>
                 <Row gutter={12}>
                   <Col span={8}>
-                    <Form.Item label="축 눈금 1:1" extra="실제 위치 모양 그대로">
+                    <Form.Item label="Equal axes (1:1)" extra="실제 위치 모양 그대로">
                       <Switch checked={chart.equal ?? true} onChange={(v) => setChart({ equal: v })} />
                     </Form.Item>
                   </Col>
                   <Col span={8}>
-                    <Form.Item label="평균 중심 (+) 표시">
+                    <Form.Item label="Show centroid (+)">
                       <Switch checked={chart.centroid ?? true} onChange={(v) => setChart({ centroid: v })} />
                     </Form.Item>
                   </Col>
                 </Row>
-                <Form.Item label="기준 위치 · 허용 범위" extra="범위를 벗어난 점은 ▲ 로 표시하고 개수를 보여줍니다">
+                <Form.Item label="Target · tolerance" extra="범위를 벗어난 점은 ▲ 로 표시하고 개수를 보여줍니다">
                   <Radio.Group
                     value={spec.shape ?? 'none'}
                     optionType="button"
                     onChange={(e) => setSpec({ shape: e.target.value })}
                     options={[
-                      { value: 'none', label: '없음' },
-                      { value: 'circle', label: '원 (반지름)' },
-                      { value: 'rect', label: '사각 (±X, ±Y)' },
+                      { value: 'none', label: 'None' },
+                      { value: 'circle', label: 'Circle (radius)' },
+                      { value: 'rect', label: 'Rectangle (±X, ±Y)' },
                     ]}
                   />
                 </Form.Item>
                 {(spec.shape ?? 'none') !== 'none' && (
                   <Space wrap style={{ marginBottom: 16 }}>
-                    <InputNumber addonBefore="중심 X" step={0.001} value={spec.cx} onChange={(v) => setSpec({ cx: v })} style={{ width: 170 }} />
-                    <InputNumber addonBefore="중심 Y" step={0.001} value={spec.cy} onChange={(v) => setSpec({ cy: v })} style={{ width: 170 }} />
+                    <InputNumber addonBefore="Center X" step={0.001} value={spec.cx} onChange={(v) => setSpec({ cx: v })} style={{ width: 170 }} />
+                    <InputNumber addonBefore="Center Y" step={0.001} value={spec.cy} onChange={(v) => setSpec({ cy: v })} style={{ width: 170 }} />
                     {spec.shape === 'circle' ? (
-                      <InputNumber addonBefore="반지름" min={0} step={0.001} value={spec.r} onChange={(v) => setSpec({ r: v })} style={{ width: 170 }} />
+                      <InputNumber addonBefore="Radius" min={0} step={0.001} value={spec.r} onChange={(v) => setSpec({ r: v })} style={{ width: 170 }} />
                     ) : (
                       <>
                         <InputNumber addonBefore="±X" min={0} step={0.001} value={spec.dx} onChange={(v) => setSpec({ dx: v })} style={{ width: 140 }} />
@@ -289,78 +289,78 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
           <>
             <Row gutter={12}>
               <Col span={18}>
-                <Form.Item label="표시 컬럼 (비우면 전체)">
+                <Form.Item label="Columns (empty = all)">
                   <Select mode="multiple" value={w.table?.columns ?? []} options={cols} onChange={(v) => setW({ ...w, table: { ...w.table, columns: v } })} />
                 </Form.Item>
               </Col>
               <Col span={6}>
-                <Form.Item label="페이지 행 수">
+                <Form.Item label="Rows per page">
                   <InputNumber min={5} max={500} value={w.table?.pageSize ?? 20} onChange={(v) => setW({ ...w, table: { ...w.table, pageSize: v ?? 20 } })} />
                 </Form.Item>
               </Col>
             </Row>
-            <Form.Item label="행 클릭 시 선택할 값" extra="행을 클릭하면 이 컬럼 값으로 다른 위젯이 바뀝니다 (예: VAID). 비우면 클릭 선택 안 함">
-              <Select allowClear showSearch placeholder="선택 안 함" value={w.select?.column} options={cols} onChange={(v) => setW({ ...w, select: v ? { column: v } : undefined })} />
+            <Form.Item label="Value to select on row click" extra="행을 클릭하면 이 컬럼 값으로 다른 위젯이 바뀝니다 (예: VAID). 비우면 클릭 선택 안 함">
+              <Select allowClear showSearch placeholder="No selection" value={w.select?.column} options={cols} onChange={(v) => setW({ ...w, select: v ? { column: v } : undefined })} />
             </Form.Item>
           </>
         )}
         {w.type === 'stat' && (
           <Row gutter={12}>
             <Col span={10}>
-              <Form.Item label="컬럼">
+              <Form.Item label="Column">
                 <Select allowClear showSearch value={w.stat?.column} options={cols} onChange={(v) => setW({ ...w, stat: { ...w.stat, column: v } })} />
               </Form.Item>
             </Col>
             <Col span={6}>
-              <Form.Item label="계산">
+              <Form.Item label="Calculation">
                 <Select
                   value={w.stat?.agg ?? 'count'}
                   onChange={(v) => setW({ ...w, stat: { ...w.stat, agg: v } })}
                   options={[
-                    { value: 'count', label: '개수' },
-                    { value: 'distinct', label: '고유 개수' },
-                    { value: 'mean', label: '평균' },
-                    { value: 'sum', label: '합계' },
-                    { value: 'min', label: '최소' },
-                    { value: 'max', label: '최대' },
-                    { value: 'last', label: '마지막 값' },
+                    { value: 'count', label: 'Count' },
+                    { value: 'distinct', label: 'Distinct count' },
+                    { value: 'mean', label: 'Mean' },
+                    { value: 'sum', label: 'Sum' },
+                    { value: 'min', label: 'Min' },
+                    { value: 'max', label: 'Max' },
+                    { value: 'last', label: 'Last value' },
                   ]}
                 />
               </Form.Item>
             </Col>
             <Col span={4}>
-              <Form.Item label="소수점">
+              <Form.Item label="Decimals">
                 <InputNumber min={0} max={6} value={w.stat?.decimals ?? 0} onChange={(v) => setW({ ...w, stat: { ...w.stat, decimals: v ?? 0 } })} />
               </Form.Item>
             </Col>
             <Col span={4}>
-              <Form.Item label="단위">
+              <Form.Item label="Unit">
                 <Input value={w.stat?.suffix} onChange={(e) => setW({ ...w, stat: { ...w.stat, suffix: e.target.value } })} />
               </Form.Item>
             </Col>
           </Row>
         )}
         {w.type === 'text' && (
-          <Form.Item label="내용">
+          <Form.Item label="Content">
             <Input.TextArea autoSize={{ minRows: 4 }} value={w.text?.content} onChange={(e) => setW({ ...w, text: { content: e.target.value } })} />
           </Form.Item>
         )}
         {w.type !== 'text' && (
           <>
             <Divider style={{ margin: '4px 0 14px' }} />
-            <Form.Item label="다른 위젯의 선택에 반응" extra="테이블에서 행을 클릭해 선택한 값(예: VAID)을 이 위젯에 어떻게 반영할지">
+            <Form.Item label="React to selection in other widgets" extra="테이블에서 행을 클릭해 선택한 값(예: VAID)을 이 위젯에 어떻게 반영할지">
               <Radio.Group
                 value={w.link?.mode ?? 'auto'}
                 onChange={(e) => setW({ ...w, link: { ...w.link, mode: e.target.value } })}
                 options={[
-                  { value: 'auto', label: '자동 (같은 이름의 컬럼)' },
-                  { value: 'column', label: '컬럼 지정' },
-                  { value: 'off', label: '반응 안 함' },
+                  { value: 'auto', label: 'Auto (same column name)' },
+                  { value: 'column', label: 'Pick column' },
+                  { value: 'off', label: 'Ignore' },
                 ]}
               />
             </Form.Item>
             {w.link?.mode === 'column' && (
-              <Form.Item label="선택 값과 비교할 컬럼">
+              <Form.Item label="Column to compare with selection">
                 <Select showSearch value={w.link.column} options={cols} onChange={(v) => setW({ ...w, link: { ...w.link, column: v } })} />
               </Form.Item>
             )}
@@ -373,14 +373,14 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
               />
             )}
             {canHighlight(w) && (w.link?.mode ?? 'auto') !== 'off' && (
-              <Form.Item label="반영 방식">
+              <Form.Item label="Behavior">
                 <Radio.Group
                   value={w.link?.behavior ?? 'highlight'}
                   optionType="button"
                   onChange={(e) => setW({ ...w, link: { ...w.link, behavior: e.target.value } })}
                   options={[
-                    { value: 'highlight', label: '전체 중 강조' },
-                    { value: 'filter', label: '선택한 것만 표시' },
+                    { value: 'highlight', label: 'Highlight among all' },
+                    { value: 'filter', label: 'Show selected only' },
                   ]}
                 />
               </Form.Item>

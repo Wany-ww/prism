@@ -38,7 +38,7 @@ def enabled() -> bool:
 def driver():
     global _driver
     if not enabled():
-        raise GraphError("Neo4j 가 설정되지 않았습니다. 환경변수 PRISM_NEO4J_URI 를 지정하세요.")
+        raise GraphError("Neo4j is not configured. Set the PRISM_NEO4J_URI environment variable.")
     with _lock:
         if _driver is None:
             from neo4j import GraphDatabase
@@ -76,9 +76,9 @@ def run_read(query: str, params: dict | None = None) -> list[dict]:
         with driver().session(database=NEO4J_DATABASE, default_access_mode=READ_ACCESS) as s:
             return s.execute_read(lambda tx: [_native(r.data()) for r in tx.run(query, params or {})])
     except ServiceUnavailable as e:
-        raise GraphError(f"Neo4j 에 연결할 수 없습니다 ({NEO4J_URI}): {e}") from e
+        raise GraphError(f"Can't connect to Neo4j ({NEO4J_URI}): {e}") from e
     except Neo4jError as e:
-        raise GraphError(f"Cypher 오류: {e.message}") from e
+        raise GraphError(f"Cypher error: {e.message}") from e
 
 
 def status() -> dict:
@@ -151,7 +151,7 @@ def build_products(df: pd.DataFrame, product_key: str, resources: list[tuple[str
             if st not in stages:
                 stages.append(st)
     if not stages:
-        raise GraphError("단계 접두어(alias.컬럼)가 있는 Match 결과가 필요합니다.")
+        raise GraphError("Needs a Match result with step prefixes (alias.column).")
     stage_cols = {st: [c for c in cols if c.startswith(st + ".")] for st in stages}
     records = df.to_dict("records")
     products = []
@@ -180,7 +180,7 @@ def build_products(df: pd.DataFrame, product_key: str, resources: list[tuple[str
         if not steps:
             continue
         pid = _key_text(row.get(product_key)) if product_key else None
-        label = pid or f"키 미부여 · {steps[0]['stage']} {steps[0]['ts'] or ''}".strip()
+        label = pid or f"unkeyed · {steps[0]['stage']} {steps[0]['ts'] or ''}".strip()
         products.append({"id": pid or f"row-{i + 1}", "keyed": pid is not None, "label": label, "steps": steps})
     return products
 
@@ -255,9 +255,9 @@ def _write_graph(name: str, products: list[dict], product_key: str, resources: l
                 ).consume()
             )
     except ServiceUnavailable as e:
-        raise GraphError(f"Neo4j 에 연결할 수 없습니다 ({NEO4J_URI}): {e}") from e
+        raise GraphError(f"Can't connect to Neo4j ({NEO4J_URI}): {e}") from e
     except Neo4jError as e:
-        raise GraphError(f"Neo4j 저장 오류: {e.message}") from e
+        raise GraphError(f"Neo4j write error: {e.message}") from e
     return {"products": len(products), "steps": sum(len(p["steps"]) for p in products)}
 
 
@@ -301,7 +301,7 @@ def _outcomes(graph: str, ids: list[str]) -> dict[str, list[dict]]:
 def _find_product(graph: str, pid: str) -> dict:
     rows = run_read("MATCH (p:Product {graph: $g, id: $id}) RETURN p.id AS id, p.label AS label", {"g": graph, "id": pid})
     if not rows:
-        raise GraphError(f"그래프 '{graph}' 에 제품 '{pid}' 이 없습니다. Match Flow 를 실행해 그래프를 갱신하세요.")
+        raise GraphError(f"Product [{pid}] is not in graph [{graph}]. Run the Match flow to refresh the graph.")
     return rows[0]
 
 
@@ -392,7 +392,7 @@ def product_graph(graph: str, pid: str, hours: float, max_related: int = 14) -> 
         for x in p["reasons"]:
             target = f"r:{x['kind']}:{x['value']}" if x["via"] == "resource" else f"e:{x['value']}"
             if target in nodes:
-                edges.append({"source": f"p:{p['product']}", "target": target, "label": "공유"})
+                edges.append({"source": f"p:{p['product']}", "target": target, "label": "shared"})
     seen, uniq = set(), []
     for e in edges:
         k = (e["source"], e["target"])

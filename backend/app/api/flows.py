@@ -29,7 +29,7 @@ NODE_TEMPLATE = '''def run(inputs, params):
 class NodeTypeIn(BaseModel):
     key: str
     name: str
-    category: str = "변환"
+    category: str = "Transform"
     description: str = ""
     color: str = "#722ed1"
     inputs: int = 1
@@ -39,7 +39,7 @@ class NodeTypeIn(BaseModel):
 
 def _check_key(key: str):
     if not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_\-]{1,60}", key):
-        raise HTTPException(400, "key는 영문으로 시작하는 영문/숫자/_/- 조합이어야 합니다.")
+        raise HTTPException(400, "key must start with a letter and contain only letters, digits, _ or -.")
 
 
 @router.get("/node-types/template")
@@ -56,7 +56,7 @@ def list_node_types(db: Session = Depends(get_db)):
 def create_node_type(body: NodeTypeIn, db: Session = Depends(get_db)):
     _check_key(body.key)
     if db.scalar(select(NodeType).where(NodeType.key == body.key)):
-        raise HTTPException(409, "같은 key의 노드가 있습니다.")
+        raise HTTPException(409, "A node with the same key already exists.")
     n = NodeType(**body.model_dump())
     n.code = n.code or NODE_TEMPLATE
     db.add(n)
@@ -69,7 +69,7 @@ def update_node_type(nid: int, body: NodeTypeIn, db: Session = Depends(get_db)):
     n = get_or_404(db, NodeType, nid)
     _check_key(body.key)
     if db.scalar(select(NodeType).where(NodeType.key == body.key, NodeType.id != nid)):
-        raise HTTPException(409, "같은 key의 노드가 있습니다.")
+        raise HTTPException(409, "A node with the same key already exists.")
     for k, v in body.model_dump().items():
         setattr(n, k, v)
     db.commit()
@@ -150,7 +150,7 @@ def update_flow(fid: int, body: FlowIn, db: Session = Depends(get_db)):
 @router.post("/flows/{fid}/duplicate")
 def duplicate_flow(fid: int, db: Session = Depends(get_db)):
     src = get_or_404(db, Flow, fid)
-    f = Flow(name=src.name + " (복사)", kind=src.kind, description=src.description, graph=src.graph, schedule_minutes=0)
+    f = Flow(name=src.name + " (copy)", kind=src.kind, description=src.description, graph=src.graph, schedule_minutes=0)
     db.add(f)
     db.commit()
     return row_dict(f)

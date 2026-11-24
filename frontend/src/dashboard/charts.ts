@@ -101,7 +101,7 @@ function seriesGroups(d: FramePayload, seriesCol?: string): [string, unknown[][]
   for (const r of d.rows) {
     const ds = di >= 0 ? String(r[di]) : '';
     if (!dsOrder.has(ds)) dsOrder.set(ds, dsOrder.size);
-    const s = si >= 0 ? (r[si] == null ? '(없음)' : String(r[si])) : '';
+    const s = si >= 0 ? (r[si] == null ? '(none)' : String(r[si])) : '';
     const k = [ds, s].filter(Boolean).join(' · ');
     if (!m.has(k)) m.set(k, { ds: dsOrder.get(ds)!, s, rows: [] });
     m.get(k)!.rows.push(r);
@@ -303,7 +303,7 @@ function xyPlot(cfg: ChartConfig, d: FramePayload, size?: ChartSize) {
   const yName = cfg.y?.[0];
   const yi = colIdx(d, yName);
   const ti = colIdx(d, cfg.tip);
-  if (xi < 0 || yi < 0) return emptyOption('X, Y 좌표 컬럼을 지정하세요');
+  if (xi < 0 || yi < 0) return emptyOption('Set the X and Y columns');
   const sel = selectedRows(d);
   const hl = !!sel?.size;
 
@@ -357,7 +357,7 @@ function xyPlot(cfg: ChartConfig, d: FramePayload, size?: ChartSize) {
       });
     }
   });
-  if (!total) return emptyOption('표시할 좌표가 없어요');
+  if (!total) return emptyOption('No points to show');
 
   if (hasSpec) {
     const cx = sp.cx!, cy = sp.cy!;
@@ -373,7 +373,7 @@ function xyPlot(cfg: ChartConfig, d: FramePayload, size?: ChartSize) {
       extend(cx + dx, cy + dy);
     }
     series.unshift({
-      name: '허용 범위',
+      name: 'Tolerance',
       type: 'line',
       data: ring,
       symbol: 'none',
@@ -416,7 +416,7 @@ function xyPlot(cfg: ChartConfig, d: FramePayload, size?: ChartSize) {
   }
 
   const graphic = hasSpec
-    ? [{ type: 'text', right: 12, top: 2, style: { text: `범위 밖 ${outside.toLocaleString()} / ${total.toLocaleString()} (${((outside / total) * 100).toFixed(1)}%)`, fill: outside ? T.ink.primary : T.ink.muted, fontSize: 12, fontWeight: outside ? 600 : 400 } }]
+    ? [{ type: 'text', right: 12, top: 2, style: { text: `Out of range ${outside.toLocaleString()} / ${total.toLocaleString()} (${((outside / total) * 100).toFixed(1)}%)`, fill: outside ? T.ink.primary : T.ink.muted, fontSize: 12, fontWeight: outside ? 600 : 400 } }]
     : [];
 
   return {
@@ -430,9 +430,9 @@ function xyPlot(cfg: ChartConfig, d: FramePayload, size?: ChartSize) {
       formatter: (p: any) => {
         const c = p.data?.centroid;
         if (c)
-          return `${p.seriesName} · 평균 중심 (${c.n.toLocaleString()}개)<br/>${cfg.x}: <b>${round(p.value[0])}</b> ± ${round(c.sdx)}<br/>${yName}: <b>${round(p.value[1])}</b> ± ${round(c.sdy)}`;
+          return `${p.seriesName} · centroid (n=${c.n.toLocaleString()})<br/>${cfg.x}: <b>${round(p.value[0])}</b> ± ${round(c.sdx)}<br/>${yName}: <b>${round(p.value[1])}</b> ± ${round(c.sdy)}`;
         const v = p.value as Pt;
-        const off = hasSpec && !inSpec(v[0], v[1]) ? '<br/><b>허용 범위 밖</b>' : '';
+        const off = hasSpec && !inSpec(v[0], v[1]) ? '<br/><b>Out of range</b>' : '';
         return `${p.seriesName}<br/>${tipLine(cfg, v[2])}${cfg.x}: <b>${round(v[0])}</b><br/>${yName}: <b>${round(v[1])}</b>${off}`;
       },
     },
@@ -448,7 +448,7 @@ function histogram(cfg: ChartConfig, d: FramePayload) {
   const bins = Math.max(2, cfg.bins ?? 20);
   const groups = seriesGroups(d, cfg.series);
   const all = d.rows.map((r) => num(r[xi])).filter((v): v is number => v !== null);
-  if (!all.length) return { title: { text: '데이터 없음', left: 'center', top: 'middle', textStyle: { color: T.ink.muted, fontSize: 13 } } };
+  if (!all.length) return { title: { text: 'No data', left: 'center', top: 'middle', textStyle: { color: T.ink.muted, fontSize: 13 } } };
   const lo = Math.min(...all), hi = Math.max(...all);
   const w = (hi - lo) / bins || 1;
   const labels = Array.from({ length: bins }, (_, i) => round(lo + w * (i + 0.5)));
@@ -466,7 +466,7 @@ function histogram(cfg: ChartConfig, d: FramePayload) {
     ...b,
     tooltip: { ...b.tooltip, trigger: 'axis', axisPointer: { type: 'shadow' } },
     xAxis: { type: 'category', data: labels, name: cfg.x, nameLocation: 'middle', nameGap: 24, ...axisCommon(), splitLine: { show: false } },
-    yAxis: { type: 'value', name: '개수', nameLocation: 'middle', nameGap: 30, ...axisCommon() },
+    yAxis: { type: 'value', name: 'Count', nameLocation: 'middle', nameGap: 30, ...axisCommon() },
     grid: { ...b.grid, left: 22, bottom: 26 },
     series: out,
   };
@@ -530,7 +530,7 @@ function quantile(sorted: number[], q: number) {
 function box(cfg: ChartConfig, d: FramePayload) {
   const ys = (cfg.y ?? []).filter((y) => colIdx(d, y) >= 0);
   const groups = seriesGroups(d, cfg.x);
-  const cats = groups.map(([g]) => g || '전체');
+  const cats = groups.map(([g]) => g || 'All');
   const out = ys.map((y) => {
     const yi = colIdx(d, y);
     return {
@@ -561,7 +561,7 @@ function pie(cfg: ChartConfig, d: FramePayload) {
   data.sort((a, b) => b.value - a.value);
   if (data.length > 6) {
     const rest = data.slice(5).reduce((a, b) => a + b.value, 0);
-    data = [...data.slice(0, 5), { name: '기타', value: round(rest) }];
+    data = [...data.slice(0, 5), { name: 'Other', value: round(rest) }];
   }
   const b = base(true);
   return {

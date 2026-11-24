@@ -33,18 +33,18 @@ import StatusTag from '../components/StatusTag';
 import { accentOf } from '../nav';
 
 const METHODS = [
-  { value: 'fs', label: '파일 경로 (로컬/UNC 공유)' },
+  { value: 'fs', label: 'File path (local / UNC share)' },
   { value: 'ftp', label: 'FTP' },
   { value: 'sftp', label: 'SFTP' },
-  { value: 'agent', label: 'Agent (별도 LAN 게이트웨이 push)' },
+  { value: 'agent', label: 'Agent (push from a gateway on another LAN)' },
 ];
 /** 설비 정보 표시 순서 (편집 폼 · 목록 · 상세 공통) */
 const INFO_FIELDS = [
-  ['factory', '공장'],
-  ['product', '제품'],
-  ['customer', '고객사'],
-  ['project', '과제'],
-  ['process', '공정'],
+  ['factory', 'Factory'],
+  ['product', 'Product'],
+  ['customer', 'Customer'],
+  ['project', 'Project'],
+  ['process', 'Process'],
 ] as const;
 
 const ENCODINGS =['utf-8', 'utf-8-sig', 'cp949', 'euc-kr', 'latin-1'];
@@ -70,11 +70,11 @@ function useDeleteEquipment(onDone: (deleted: number[]) => void) {
     const records = usages.reduce((s, u) => s + u.records, 0);
     const flows = [...new Map(usages.flatMap((u) => u.flows).map((f) => [f.id, f.name])).values()];
     modal.confirm({
-      title: targets.length === 1 ? `'${targets[0].name}' 설비를 삭제할까요?` : `설비 ${targets.length}대를 삭제할까요?`,
+      title: targets.length === 1 ? `Delete equipment [${targets[0].name}]?` : `Delete ${targets.length} equipment?`,
       width: 460,
       content: (
         <div style={{ lineHeight: 1.7 }}>
-          {targets.length > 1 && <div className="muted">{targets.map((t) => t.name).join(', ')}</div>}
+          {targets.length > 1 && <div className="muted">{targets.map((t) => `[${t.name}]`).join(', ')}</div>}
           <div>
             수집 파일 <b>{files.toLocaleString()}</b>개 · 레코드 <b>{records.toLocaleString()}</b>행이 함께 삭제되며 되돌릴 수 없어요.
           </div>
@@ -84,19 +84,19 @@ function useDeleteEquipment(onDone: (deleted: number[]) => void) {
               type="warning"
               showIcon
               style={{ marginTop: 10 }}
-              message={`이 설비를 쓰는 Flow ${flows.length}개`}
+              message={`${flows.length} flow(s) use this equipment`}
               description={<span>{flows.join(', ')} — 설비 데이터 노드에서 선택이 해제돼요.</span>}
             />
           )}
         </div>
       ),
-      okText: '삭제',
+      okText: 'Delete',
       okButtonProps: { danger: true },
-      cancelText: '취소',
+      cancelText: 'Cancel',
       onOk: async () => {
         try {
           const r = await api.post('/api/equipment/delete', { ids: targets.map((t) => t.id) });
-          message.success(`설비 ${r.deleted.length}대를 삭제했어요.`);
+          message.success(`Deleted ${r.deleted.length} equipment.`);
           onDone(r.deleted);
         } catch (e: any) {
           message.error(e.message);
@@ -154,9 +154,9 @@ export default function EquipmentPage() {
     setBusy((b) => ({ ...b, [e.id]: true }));
     try {
       const r = await api.post(`/api/equipment/${e.id}/capture`);
-      if (r.status === 'ok') message.success(`${e.name}: ${r.message}`);
+      if (r.status === 'ok') message.success(`[${e.name}] ${r.message}`);
       else if (r.status === 'busy') message.info(r.message);
-      else message.error(`${e.name}: ${r.message.split('\n')[0]}`);
+      else message.error(`[${e.name}] ${r.message.split('\n')[0]}`);
     } finally {
       setBusy((b) => ({ ...b, [e.id]: false }));
       load();
@@ -187,7 +187,7 @@ export default function EquipmentPage() {
           '/capture/equipment': (
             <>
               <span className="dot" style={{ background: list.some((e) => e.enabled && e.status === 'error') ? 'var(--red)' : 'var(--green)' }} />
-              {running}대 운영
+              {running} active
             </>
           ),
         }}
@@ -195,13 +195,13 @@ export default function EquipmentPage() {
           <>
             {selected.length > 0 && (
               <Button danger icon={<DeleteOutlined />} onClick={() => removeEquipment(list.filter((e) => selected.includes(e.id)))}>
-                선택 삭제 ({selected.length})
+                Delete selected ({selected.length})
               </Button>
             )}
-            <Input placeholder="설비명 · IP · 공장 · 고객사" allowClear prefix={<SearchOutlined className="muted" />} onChange={(e) => setFilter((f) => ({ ...f, q: e.target.value }))} style={{ width: 240 }} />
+            <Input placeholder="Name · IP · factory · customer" allowClear prefix={<SearchOutlined className="muted" />} onChange={(e) => setFilter((f) => ({ ...f, q: e.target.value }))} style={{ width: 240 }} />
             <Button icon={<ReloadOutlined />} onClick={load} />
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ ...EMPTY })}>
-              설비 추가
+              Add equipment
             </Button>
           </>
         }
@@ -209,7 +209,7 @@ export default function EquipmentPage() {
       <div className="pill-tabs" style={{ marginBottom: 10 }}>
         {[undefined, ...(sugg.process ?? [])].map((p) => (
           <div key={p ?? 'all'} className={`pill-tab ${filter.process === p ? 'active' : ''}`} onClick={() => setFilter((f) => ({ ...f, process: p }))}>
-            {p ?? '전체 공정'}
+            {p ?? 'All processes'}
           </div>
         ))}
       </div>
@@ -217,12 +217,12 @@ export default function EquipmentPage() {
         rowKey="id"
         dataSource={rows}
         pagination={false}
-        scroll={{ x: 1480 }}
+        scroll={{ x: 1520 }}
         rowSelection={{ selectedRowKeys: selected, onChange: (keys) => setSelected(keys as number[]), columnWidth: 44, fixed: true }}
         onRow={(e) => ({ onDoubleClick: () => setDetail(e) })}
         columns={[
           {
-            title: '설비',
+            title: 'Equipment',
             dataIndex: 'name',
             width: 210,
             fixed: 'left',
@@ -236,18 +236,18 @@ export default function EquipmentPage() {
             ),
           },
           {
-            title: '상태',
+            title: 'Status',
             width: 110,
             render: (_, e) => <StatusTag status={e.running ? 'running' : e.status} enabled={e.enabled} />,
           },
           ...INFO_FIELDS.map(([k, title]) => ({ title, dataIndex: k, width: k === 'factory' ? 110 : 100 })),
           { title: 'IP', dataIndex: 'ip', width: 110, className: 'num' },
-          { title: '방식', dataIndex: 'access_method', width: 70, render: (v) => <span className="muted">{v.toUpperCase()}</span> },
-          { title: '주기', dataIndex: 'capture_interval_sec', width: 70, render: (v) => (v >= 60 ? `${Math.round(v / 60)}분` : `${v}초`) },
-          { title: 'Parser', dataIndex: 'parser_name', width: 150, render: (v) => v ?? <Typography.Text type="danger">미지정</Typography.Text> },
-          { title: '레코드', dataIndex: 'record_count', width: 100, align: 'right', className: 'num', render: (v) => <b>{(v ?? 0).toLocaleString()}</b> },
+          { title: 'Method', dataIndex: 'access_method', width: 90, render: (v) => <span className="muted">{v.toUpperCase()}</span> },
+          { title: 'Interval', dataIndex: 'capture_interval_sec', width: 90, render: (v) => (v >= 60 ? `${Math.round(v / 60)} min` : `${v}s`) },
+          { title: 'Parser', dataIndex: 'parser_name', width: 150, render: (v) => v ?? <Typography.Text type="danger">Not set</Typography.Text> },
+          { title: 'Records', dataIndex: 'record_count', width: 100, align: 'right', className: 'num', render: (v) => <b>{(v ?? 0).toLocaleString()}</b> },
           {
-            title: '마지막 수집',
+            title: 'Last capture',
             dataIndex: 'last_capture_at',
             width: 160,
             render: (v, e) =>
@@ -260,7 +260,7 @@ export default function EquipmentPage() {
               ),
           },
           {
-            title: '운영',
+            title: 'Active',
             dataIndex: 'enabled',
             width: 70,
             render: (v, e) => <Switch size="small" checked={v} onChange={(c) => toggle(e, c)} />,
@@ -271,16 +271,16 @@ export default function EquipmentPage() {
             fixed: 'right',
             render: (_, e) => (
               <Space size={2} onDoubleClick={(ev) => ev.stopPropagation()}>
-                <Tooltip title="지금 수집">
+                <Tooltip title="Capture now">
                   <Button type="text" icon={<PlayCircleOutlined />} loading={busy[e.id] || e.running} disabled={e.access_method === 'agent'} onClick={() => capture(e)} />
                 </Tooltip>
-                <Tooltip title="상세/데이터">
+                <Tooltip title="Details / data">
                   <Button type="text" icon={<EyeOutlined />} onClick={() => setDetail(e)} />
                 </Tooltip>
-                <Tooltip title="편집">
+                <Tooltip title="Edit">
                   <Button type="text" icon={<EditOutlined />} onClick={() => setEditing(e)} />
                 </Tooltip>
-                <Tooltip title="삭제">
+                <Tooltip title="Delete">
                   <Button type="text" danger icon={<DeleteOutlined />} onClick={() => removeEquipment([e])} />
                 </Tooltip>
               </Space>
@@ -349,7 +349,7 @@ function EquipmentForm({
     }
   };
   const closeParser = () => {
-    if (parserDirty && !confirm('저장하지 않은 Parser 변경 사항이 있어요. 닫을까요?')) return;
+    if (parserDirty && !confirm('You have unsaved parser changes. Close anyway?')) return;
     setParserDraft(null);
     setParserDirty(false);
   };
@@ -360,7 +360,7 @@ function EquipmentForm({
     try {
       options = v.options_text ? JSON.parse(v.options_text) : {};
     } catch {
-      throw new Error('옵션 JSON 형식이 올바르지 않습니다.');
+      throw new Error('Options must be valid JSON.');
     }
     const { options_text, ...rest } = v;
     return { ...rest, options };
@@ -371,7 +371,7 @@ function EquipmentForm({
       const body = await collect();
       if (value.id) await api.put(`/api/equipment/${value.id}`, body);
       else await api.post('/api/equipment', body);
-      message.success('저장되었습니다.');
+      message.success('Saved.');
       onSaved();
     } catch (e: any) {
       if (e?.message) message.error(e.message);
@@ -396,30 +396,30 @@ function EquipmentForm({
     <Drawer
       open
       width={760}
-      title={value.id ? `설비 편집 · ${value.name}` : '설비 추가'}
+      title={value.id ? `Edit equipment [${value.name}]` : 'Add equipment'}
       onClose={onClose}
       extra={
         <Space>
           {onDelete && (
             <Button danger icon={<DeleteOutlined />} onClick={onDelete}>
-              삭제
+              Delete
             </Button>
           )}
-          <Button onClick={onClose}>취소</Button>
+          <Button onClick={onClose}>Cancel</Button>
           <Button type="primary" onClick={save}>
-            저장
+            Save
           </Button>
         </Space>
       }
     >
       <Form form={form} layout="vertical" initialValues={{ ...value, options_text: JSON.stringify(value.options ?? {}, null, 2) }}>
-        <Divider orientation="left" plain style={{ marginTop: 0 }}>
-          기본 정보
+        <Divider className="section-divider" orientation="left" plain style={{ marginTop: 0 }}>
+          Basic Information
         </Divider>
         <Row gutter={12}>
           <Col span={12}>
-            <Form.Item name="name" label="설비명" rules={[{ required: true }]}>
-              <Input placeholder="예) Blade 조립기 #1" />
+            <Form.Item name="name" label="Name" rules={[{ required: true }]}>
+              <Input placeholder="e.g. Blade Assembly #1" />
             </Form.Item>
           </Col>
           <Col span={12}>
@@ -437,14 +437,14 @@ function EquipmentForm({
             </Col>
           ))}
         </Row>
-        <Form.Item name="description" label="설명">
+        <Form.Item name="description" label="Description">
           <Input.TextArea autoSize={{ minRows: 1, maxRows: 3 }} />
         </Form.Item>
 
-        <Divider orientation="left" plain>
-          로그 수집
+        <Divider className="section-divider" orientation="left" plain>
+          Log Capture
         </Divider>
-        <Form.Item name="access_method" label="접근 방식">
+        <Form.Item name="access_method" label="Access method">
           <Radio.Group optionType="button" options={METHODS} />
         </Form.Item>
         {method === 'agent' && (
@@ -452,7 +452,7 @@ function EquipmentForm({
             type="info"
             showIcon
             style={{ marginBottom: 12 }}
-            message="별도 LAN 설비용"
+            message="For equipment on a separate LAN"
             description={
               <span>
                 게이트웨이 PC(대표 설비 PC / 작업 PC)에서 <code>python prism_agent.py --server http://서버:8000 --equipment "{value.name || '설비명'}"</code> 를 실행하면
@@ -464,28 +464,28 @@ function EquipmentForm({
         {(method === 'ftp' || method === 'sftp') && (
           <Row gutter={12}>
             <Col span={6}>
-              <Form.Item name="port" label="포트">
+              <Form.Item name="port" label="Port">
                 <InputNumber style={{ width: '100%' }} placeholder={method === 'ftp' ? '21' : '22'} />
               </Form.Item>
             </Col>
             <Col span={9}>
-              <Form.Item name="username" label="계정">
+              <Form.Item name="username" label="Username">
                 <Input />
               </Form.Item>
             </Col>
             <Col span={9}>
-              <Form.Item name="password" label="비밀번호">
+              <Form.Item name="password" label="Password">
                 <Input.Password autoComplete="new-password" />
               </Form.Item>
             </Col>
           </Row>
         )}
-        <Form.Item name="folder_mode" label="폴더 구조">
+        <Form.Item name="folder_mode" label="Folder layout">
           <Radio.Group
             optionType="button"
             options={[
-              { value: 'flat', label: '경로에 파일이 바로 있음' },
-              { value: 'date', label: '경로 아래 날짜별 폴더' },
+              { value: 'flat', label: 'Files directly in path' },
+              { value: 'date', label: 'Dated folders under path' },
             ]}
           />
         </Form.Item>
@@ -498,14 +498,14 @@ function EquipmentForm({
             description={
               <span>
                 <code>20261124</code> <code>2026-11-24</code> <code>2026_11_24</code> <code>261124</code> <code>2026\11\24</code> <code>2026-11\24</code> 형식을 모두 인식하고(최대 3단계),
-                오늘부터 <b>조회 일수</b> 전까지의 날짜 폴더만 확인합니다.
+                오늘부터 <b>Lookback days</b> 전까지의 날짜 폴더만 확인합니다.
               </span>
             }
           />
         )}
         <Form.Item
           name="log_path"
-          label={folderMode === 'date' ? '로그 상위 폴더 (날짜 폴더들이 있는 곳)' : '로그 저장 경로 (폴더)'}
+          label={folderMode === 'date' ? 'Log root folder (contains the dated folders)' : 'Log folder'}
           rules={[{ required: true }]}
           extra={
             folderMode === 'date' ? (
@@ -524,62 +524,62 @@ function EquipmentForm({
         </Form.Item>
         <Row gutter={12}>
           <Col span={10}>
-            <Form.Item name="file_pattern" label="파일명 패턴" extra={<span>예) <code>{'Result_{date:%Y%m%d}*.csv'}</code></span>}>
+            <Form.Item name="file_pattern" label="File name pattern" extra={<span>예) <code>{'Result_{date:%Y%m%d}*.csv'}</code></span>}>
               <Input className="mono" />
             </Form.Item>
           </Col>
           <Col span={5}>
-            <Form.Item name="lookback_days" label="조회 일수" tooltip="오늘 포함 며칠 전 날짜 폴더/파일까지 확인할지">
+            <Form.Item name="lookback_days" label="Lookback days" tooltip="오늘 포함 며칠 전 날짜 폴더/파일까지 확인할지">
               <InputNumber min={0} max={365} style={{ width: '100%' }} />
             </Form.Item>
           </Col>
           <Col span={5}>
-            <Form.Item name="capture_interval_sec" label="수집 주기(초)">
+            <Form.Item name="capture_interval_sec" label="Capture interval (s)">
               <InputNumber min={10} style={{ width: '100%' }} />
             </Form.Item>
           </Col>
           <Col span={4}>
-            <Form.Item name="encoding" label="인코딩">
+            <Form.Item name="encoding" label="Encoding">
               <AutoComplete options={ENCODINGS.map((e) => ({ value: e }))} />
             </Form.Item>
           </Col>
         </Row>
         <Row gutter={12} align="bottom">
           <Col span={14}>
-            <Form.Item label="Parser" required style={{ marginBottom: 0 }}>
+            <Form.Item label="Parser" required>
               <Space.Compact style={{ width: '100%' }}>
-                <Form.Item name="parser_id" noStyle rules={[{ required: true, message: 'Parser를 선택하거나 새로 만드세요' }]}>
+                <Form.Item name="parser_id" noStyle rules={[{ required: true, message: 'Choose a parser or create one' }]}>
                   <Select
                     showSearch
                     optionFilterProp="label"
                     options={parsers.map((p) => ({ value: p.id, label: p.name }))}
-                    placeholder="Parser 선택"
+                    placeholder="Select parser"
                     style={{ width: '100%' }}
                   />
                 </Form.Item>
-                <Tooltip title="선택한 Parser 코드 편집">
+                <Tooltip title="Edit selected parser code">
                   <Button icon={<EditOutlined />} disabled={!parserId} onClick={() => openParser('edit')} />
                 </Tooltip>
-                <Tooltip title="새 Parser 만들기">
+                <Tooltip title="New parser">
                   <Button icon={<PlusOutlined />} onClick={() => openParser('new')} />
                 </Tooltip>
               </Space.Compact>
             </Form.Item>
           </Col>
           <Col span={4}>
-            <Form.Item name="enabled" label="운영" valuePropName="checked">
+            <Form.Item name="enabled" label="Active" valuePropName="checked">
               <Switch />
             </Form.Item>
           </Col>
           <Col span={6}>
             <Form.Item>
               <Button block onClick={runProbe} loading={probing}>
-                경로/파일 확인
+                Check path / files
               </Button>
             </Form.Item>
           </Col>
         </Row>
-        <Form.Item name="options_text" label="설비별 옵션 (JSON, Parser에서 ctx['options'] 로 사용)">
+        <Form.Item name="options_text" label="Equipment options (JSON, ctx['options'] in the parser)">
           <Input.TextArea className="mono" autoSize={{ minRows: 2, maxRows: 8 }} />
         </Form.Item>
       </Form>
@@ -588,7 +588,7 @@ function EquipmentForm({
           {!probe.ok && <Alert type="error" message={probe.error} showIcon />}
           {probe.ok && (
             <>
-              <Typography.Text type="secondary">조회 위치</Typography.Text>
+              <Typography.Text type="secondary">Searched locations</Typography.Text>
               <ul className="mono" style={{ margin: '4px 0 8px', paddingLeft: 18 }}>
                 {probe.locations.map((l: any, i: number) => (
                   <li key={i}>
@@ -601,14 +601,14 @@ function EquipmentForm({
                 <Table
                   size="small"
                   rowKey="path"
-                  title={() => `발견된 파일 ${probe.total}개`}
+                  title={() => `${probe.total} files found`}
                   dataSource={probe.files}
                   pagination={{ pageSize: 8, size: 'small' }}
                   columns={[
-                    { title: '파일', dataIndex: 'path', className: 'mono', ellipsis: true, render: (v: string) => <Tooltip title={v}>{v.split(/[\\/]/).slice(-2).join('/')}</Tooltip> },
-                    { title: '크기', dataIndex: 'size', width: 90, align: 'right', render: (v) => `${(v / 1024).toFixed(1)} KB` },
-                    { title: '수정', dataIndex: 'mtime', width: 150, render: fmtTime },
-                    { title: '수집', dataIndex: 'captured', width: 70, render: (v) => (v ? <StatusTag status={v} /> : <Tag>신규</Tag>) },
+                    { title: 'File', dataIndex: 'path', className: 'mono', ellipsis: true, render: (v: string) => <Tooltip title={v}>{v.split(/[\\/]/).slice(-2).join('/')}</Tooltip> },
+                    { title: 'Size', dataIndex: 'size', width: 90, align: 'right', render: (v) => `${(v / 1024).toFixed(1)} KB` },
+                    { title: 'Modified', dataIndex: 'mtime', width: 150, render: fmtTime },
+                    { title: 'Captured', dataIndex: 'captured', width: 70, render: (v) => (v ? <StatusTag status={v} /> : <Tag>New</Tag>) },
                   ]}
                 />
               )}
@@ -619,7 +619,7 @@ function EquipmentForm({
       <Drawer
         open={!!parserDraft}
         width="min(1080px, 94vw)"
-        title={parserDraft?.id ? `Parser 편집 · ${parserDraft.name}` : parserDraft ? '새 Parser' : ''}
+        title={parserDraft?.id ? `Edit parser [${parserDraft.name}]` : parserDraft ? 'New parser' : ''}
         onClose={closeParser}
         destroyOnClose
         styles={{ body: { background: 'var(--bg-sub)', padding: 16 } }}
@@ -666,24 +666,24 @@ function EquipmentDetail({ eq, onClose, onChanged, onDelete }: { eq: Equipment; 
     <Drawer
       open
       width="min(1200px, 92vw)"
-      title={eq.name}
+      title={`[${eq.name}]`}
       onClose={onClose}
       extra={
         <Space>
           <Button icon={<ReloadOutlined />} onClick={load} />
           <Popconfirm
-            title="수집 이력과 레코드를 모두 삭제하고 다음 주기에 다시 파싱합니다."
+            title="Reset data?" description="수집 이력과 레코드를 모두 삭제하고 다음 주기에 다시 파싱합니다."
             onConfirm={async () => {
               await api.post(`/api/equipment/${eq.id}/reset`);
-              message.success('초기화되었습니다.');
+              message.success('Data reset.');
               load();
               onChanged();
             }}
           >
-            <Button>데이터 초기화</Button>
+            <Button>Reset data</Button>
           </Popconfirm>
           <Button danger icon={<DeleteOutlined />} onClick={onDelete}>
-            설비 삭제
+            Delete equipment
           </Button>
         </Space>
       }
@@ -696,10 +696,10 @@ function EquipmentDetail({ eq, onClose, onChanged, onDelete }: { eq: Equipment; 
         ))}
         <Descriptions.Item label="IP">{eq.ip}</Descriptions.Item>
         <Descriptions.Item label="Parser">{eq.parser_name}</Descriptions.Item>
-        <Descriptions.Item label="경로" span={3}>
+        <Descriptions.Item label="Path" span={3}>
           <span className="mono">
             {eq.log_path}
-            {eq.folder_mode === 'date' ? ' / (날짜 폴더) / ' : ' / '}
+            {eq.folder_mode === 'date' ? ' / (dated folder) / ' : ' / '}
             {eq.file_pattern}
           </span>
         </Descriptions.Item>
@@ -709,12 +709,12 @@ function EquipmentDetail({ eq, onClose, onChanged, onDelete }: { eq: Equipment; 
         items={[
           {
             key: 'rec',
-            label: `레코드 (${(records?.row_count ?? 0).toLocaleString()})`,
+            label: `Records (${(records?.row_count ?? 0).toLocaleString()})`,
             children: <DataGrid data={records} height="calc(100vh - 420px)" />,
           },
           {
             key: 'files',
-            label: `수집 파일 (${files.length})`,
+            label: `Captured files (${files.length})`,
             children: (
               <Table
                 size="small"
@@ -722,22 +722,22 @@ function EquipmentDetail({ eq, onClose, onChanged, onDelete }: { eq: Equipment; 
                 dataSource={files}
                 pagination={{ pageSize: 20, size: 'small' }}
                 columns={[
-                  { title: '경로', dataIndex: 'path', className: 'mono', ellipsis: true },
-                  { title: '행', dataIndex: 'rows', width: 80, align: 'right' },
-                  { title: '크기', dataIndex: 'size', width: 90, align: 'right', render: (v) => `${(v / 1024).toFixed(1)} KB` },
-                  { title: '상태', dataIndex: 'status', width: 100, render: (v, r) => (
+                  { title: 'Path', dataIndex: 'path', className: 'mono', ellipsis: true },
+                  { title: 'Rows', dataIndex: 'rows', width: 80, align: 'right' },
+                  { title: 'Size', dataIndex: 'size', width: 90, align: 'right', render: (v) => `${(v / 1024).toFixed(1)} KB` },
+                  { title: 'Status', dataIndex: 'status', width: 100, render: (v, r) => (
                     <Tooltip title={r.error ? <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{r.error}</pre> : undefined}>
                       <span><StatusTag status={v} /></span>
                     </Tooltip>
                   ) },
-                  { title: '처리 시각', dataIndex: 'captured_at', width: 160, render: fmtTime },
+                  { title: 'Processed at', dataIndex: 'captured_at', width: 160, render: fmtTime },
                 ]}
               />
             ),
           },
           {
             key: 'runs',
-            label: '수집 이력',
+            label: 'Capture runs',
             children: (
               <Table
                 size="small"
@@ -746,13 +746,13 @@ function EquipmentDetail({ eq, onClose, onChanged, onDelete }: { eq: Equipment; 
                 pagination={{ pageSize: 20, size: 'small' }}
                 expandable={{ expandedRowRender: (r) => <pre className="mono" style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{r.message}</pre> }}
                 columns={[
-                  { title: '시작', dataIndex: 'started_at', width: 160, render: fmtTime },
-                  { title: '트리거', dataIndex: 'trigger', width: 90 },
-                  { title: '상태', dataIndex: 'status', width: 110, render: (v) => <StatusTag status={v} /> },
-                  { title: '발견', dataIndex: 'files_found', width: 70, align: 'right' },
-                  { title: '처리', dataIndex: 'files_parsed', width: 70, align: 'right' },
-                  { title: '행', dataIndex: 'rows', width: 80, align: 'right' },
-                  { title: '메시지', dataIndex: 'message', ellipsis: true },
+                  { title: 'Started', dataIndex: 'started_at', width: 160, render: fmtTime },
+                  { title: 'Trigger', dataIndex: 'trigger', width: 90 },
+                  { title: 'Status', dataIndex: 'status', width: 110, render: (v) => <StatusTag status={v} /> },
+                  { title: 'Found', dataIndex: 'files_found', width: 70, align: 'right' },
+                  { title: 'Parsed', dataIndex: 'files_parsed', width: 70, align: 'right' },
+                  { title: 'Rows', dataIndex: 'rows', width: 80, align: 'right' },
+                  { title: 'Message', dataIndex: 'message', ellipsis: true },
                 ]}
               />
             ),

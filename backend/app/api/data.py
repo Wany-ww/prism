@@ -60,11 +60,11 @@ def dataset_data(
     df = _load(db, name)
     if filter_col:
         if filter_col not in df.columns:
-            raise HTTPException(400, f"'{filter_col}' 컬럼이 없습니다.")
+            raise HTTPException(400, f"Column '{filter_col}' does not exist.")
         try:
             values = json.loads(filter_values or "[]")
         except ValueError as e:
-            raise HTTPException(400, "filter_values 는 JSON 배열이어야 합니다.") from e
+            raise HTTPException(400, "filter_values must be a JSON array.") from e
         wanted = set(_norm_keys(pd.Series([str(v) for v in values], dtype=object)))
         df = df[_norm_keys(df[filter_col]).isin(wanted)]
     if columns:

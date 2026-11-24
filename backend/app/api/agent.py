@@ -30,7 +30,7 @@ def _auth(token: str | None):
 def _equipment(db, name: str) -> Equipment:
     eq = db.scalar(select(Equipment).where(Equipment.name == name))
     if eq is None:
-        raise HTTPException(404, f"설비 '{name}' 없음")
+        raise HTTPException(404, f"Equipment [{name}] not found")
     return eq
 
 

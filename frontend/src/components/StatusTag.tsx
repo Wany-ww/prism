@@ -1,13 +1,13 @@
 import { LoadingOutlined } from '@ant-design/icons';
 
 const MAP: Record<string, { cls: string; label: string }> = {
-  ok: { cls: 'st-ok', label: '정상' },
-  warning: { cls: 'st-warning', label: '일부 오류' },
-  error: { cls: 'st-error', label: '오류' },
-  running: { cls: 'st-running', label: '수집 중' },
-  idle: { cls: 'st-idle', label: '대기' },
-  disabled: { cls: 'st-idle', label: '중지' },
-  skipped: { cls: 'st-idle', label: '건너뜀' },
+  ok: { cls: 'st-ok', label: 'OK' },
+  warning: { cls: 'st-warning', label: 'Partial errors' },
+  error: { cls: 'st-error', label: 'Error' },
+  running: { cls: 'st-running', label: 'Capturing' },
+  idle: { cls: 'st-idle', label: 'Idle' },
+  disabled: { cls: 'st-idle', label: 'Stopped' },
+  skipped: { cls: 'st-idle', label: 'Skipped' },
 };
 
 const COLOR: Record<string, string> = { 'st-ok': 'var(--green)', 'st-error': 'var(--red)', 'st-warning': 'var(--orange)', 'st-running': 'var(--blue)' };

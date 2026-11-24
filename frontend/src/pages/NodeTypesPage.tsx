@@ -25,7 +25,7 @@ export default function NodeTypesPage() {
 
   const create = async () => {
     const { code } = await api.get('/api/node-types/template');
-    setCur({ key: '', name: '', category: '변환', description: '', color: '#a234c7', inputs: 1, params: [], code });
+    setCur({ key: '', name: '', category: 'Transform', description: '', color: '#a234c7', inputs: 1, params: [], code });
     setDirty(true);
   };
   const save = async () => {
@@ -34,7 +34,7 @@ export default function NodeTypesPage() {
       const r = cur?.id ? await api.put(`/api/node-types/${cur.id}`, body) : await api.post('/api/node-types', body);
       setCur(r);
       setDirty(false);
-      message.success('저장되었습니다. 이 노드를 쓰는 모든 Flow 에 바로 반영됩니다.');
+      message.success('Saved. Every flow using this node picks it up right away.');
       load();
     } catch (e: any) {
       message.error(e.message);
@@ -50,7 +50,7 @@ export default function NodeTypesPage() {
         stage="analysis"
         extra={
           <Button type="primary" icon={<PlusOutlined />} onClick={create}>
-            새 노드
+            New node
           </Button>
         }
       />
@@ -67,7 +67,7 @@ export default function NodeTypesPage() {
                     className={`list-item ${cur?.id === n.id ? 'active' : ''}`}
                     style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}
                     onClick={() => {
-                      if (dirty && !confirm('저장하지 않은 변경 사항이 있습니다. 이동할까요?')) return;
+                      if (dirty && !confirm('You have unsaved changes. Leave anyway?')) return;
                       setCur(n);
                       setDirty(false);
                     }}
@@ -91,43 +91,43 @@ export default function NodeTypesPage() {
             <Card size="small">
               <Space wrap style={{ marginBottom: 8 }}>
                 <Input addonBefore="key" className="mono" value={cur.key} onChange={(e) => upd({ key: e.target.value })} style={{ width: 210 }} />
-                <Input addonBefore="이름" value={cur.name} onChange={(e) => upd({ name: e.target.value })} style={{ width: 220 }} />
-                <AutoComplete value={cur.category} options={cats.map((c) => ({ value: c }))} onChange={(v) => upd({ category: v })} style={{ width: 120 }} placeholder="분류" />
+                <Input addonBefore="Name" value={cur.name} onChange={(e) => upd({ name: e.target.value })} style={{ width: 220 }} />
+                <AutoComplete value={cur.category} options={cats.map((c) => ({ value: c }))} onChange={(v) => upd({ category: v })} style={{ width: 120 }} placeholder="Category" />
                 <Space.Compact>
-                  <Button disabled>입력 수</Button>
+                  <Button disabled>Inputs</Button>
                   <InputNumber min={0} max={8} value={cur.inputs} onChange={(v) => upd({ inputs: v ?? 1 })} style={{ width: 64 }} />
                 </Space.Compact>
                 <ColorPicker value={cur.color} onChange={(c) => upd({ color: c.toHexString() })} />
                 <Button type="primary" icon={<SaveOutlined />} onClick={save} disabled={!dirty}>
-                  저장
+                  Save
                 </Button>
                 {cur.id && (
-                  <Popconfirm title="삭제할까요? 이 노드를 쓰는 Flow 는 실행 시 오류가 납니다." onConfirm={() => api.del(`/api/node-types/${cur.id}`).then(() => { setCur(null); load(); })}>
+                  <Popconfirm title="Delete this node?" description="이 노드를 쓰는 Flow 는 실행 시 오류가 납니다." onConfirm={() => api.del(`/api/node-types/${cur.id}`).then(() => { setCur(null); load(); })}>
                     <Button danger icon={<DeleteOutlined />} />
                   </Popconfirm>
                 )}
               </Space>
-              <Input.TextArea placeholder="설명" value={cur.description} autoSize onChange={(e) => upd({ description: e.target.value })} />
+              <Input.TextArea placeholder="Description" value={cur.description} autoSize onChange={(e) => upd({ description: e.target.value })} />
             </Card>
-            <Card size="small" title="파라미터 (GUI 설정 폼이 자동 생성되며 params 로 전달)" extra={<Button size="small" icon={<PlusOutlined />} onClick={() => upd({ params: [...params, { name: '', label: '', type: 'string' }] })}>추가</Button>}>
+            <Card size="small" title={<span>Parameters <span className="muted" style={{ fontWeight: 400 }}>· GUI 설정 폼이 자동 생성되며 params 로 전달</span></span>} extra={<Button size="small" icon={<PlusOutlined />} onClick={() => upd({ params: [...params, { name: '', label: '', type: 'string' }] })}>Add</Button>}>
               <Table
                 size="small"
                 rowKey={(_, i) => String(i)}
                 pagination={false}
                 dataSource={params}
-                locale={{ emptyText: '파라미터 없음' }}
+                locale={{ emptyText: 'No parameters' }}
                 columns={[
                   { title: 'name', width: 150, render: (_, p, i) => <Input className="mono" value={p.name} onChange={(e) => setParam(i, { name: e.target.value })} /> },
-                  { title: '표시 이름', width: 180, render: (_, p, i) => <Input value={p.label} onChange={(e) => setParam(i, { label: e.target.value })} /> },
-                  { title: '타입', width: 120, render: (_, p, i) => <Select value={p.type} options={TYPES.map((t) => ({ value: t }))} onChange={(v) => setParam(i, { type: v })} style={{ width: '100%' }} /> },
+                  { title: 'Label', width: 180, render: (_, p, i) => <Input value={p.label} onChange={(e) => setParam(i, { label: e.target.value })} /> },
+                  { title: 'Type', width: 120, render: (_, p, i) => <Select value={p.type} options={TYPES.map((t) => ({ value: t }))} onChange={(v) => setParam(i, { type: v })} style={{ width: '100%' }} /> },
                   {
-                    title: '기본값',
+                    title: 'Default',
                     width: 160,
                     render: (_, p, i) => (
                       <Input
                         className="mono"
                         defaultValue={p.default === undefined ? '' : JSON.stringify(p.default)}
-                        placeholder='JSON (예: "h", 3, true, [])'
+                        placeholder='JSON (e.g. "h", 3, true, [])'
                         onBlur={(e) => {
                           try {
                             setParam(i, { default: e.target.value ? JSON.parse(e.target.value) : undefined });
@@ -139,9 +139,9 @@ export default function NodeTypesPage() {
                     ),
                   },
                   {
-                    title: '선택지 (select)',
+                    title: 'Options (select) / help',
                     render: (_, p, i) =>
-                      p.type === 'select' ? <Select mode="tags" value={p.options ?? []} onChange={(v) => setParam(i, { options: v })} style={{ width: '100%' }} /> : <Input value={p.help} placeholder="도움말" onChange={(e) => setParam(i, { help: e.target.value })} />,
+                      p.type === 'select' ? <Select mode="tags" value={p.options ?? []} onChange={(v) => setParam(i, { options: v })} style={{ width: '100%' }} /> : <Input value={p.help} placeholder="Help text" onChange={(e) => setParam(i, { help: e.target.value })} />,
                   },
                   { title: '', width: 40, render: (_, __, i) => <Button type="text" danger icon={<DeleteOutlined />} onClick={() => upd({ params: params.filter((_, j) => j !== i) })} /> },
                 ]}
@@ -150,7 +150,7 @@ export default function NodeTypesPage() {
                 타입 <Tag>column</Tag>/<Tag>columns</Tag> 는 Flow 에서 입력 데이터의 컬럼 목록을 선택지로 보여줍니다.
               </Typography.Paragraph>
             </Card>
-            <Card size="small" title={<span>코드 · <code>def run(inputs, params)</code></span>}>
+            <Card size="small" title={<span>Code · <code>def run(inputs, params)</code></span>}>
               <CodeEditor value={cur.code ?? ''} onChange={(code) => upd({ code })} height="400px" />
             </Card>
           </Space>

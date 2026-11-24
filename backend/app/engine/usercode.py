@@ -47,12 +47,12 @@ def load_function(code: str, func_name: str, label: str):
     try:
         exec(compile(code, f"<{label}>", "exec"), ns)
     except SyntaxError as e:
-        raise UserCodeError(f"[{label}] 문법 오류 {e.lineno}행: {e.msg}", traceback.format_exc(limit=0)) from e
+        raise UserCodeError(f"[{label}] Syntax error at line {e.lineno}: {e.msg}", traceback.format_exc(limit=0)) from e
     except Exception as e:
-        raise UserCodeError(f"[{label}] 코드 로딩 실패: {e}", user_traceback(e, label)) from e
+        raise UserCodeError(f"[{label}] Failed to load code: {e}", user_traceback(e, label)) from e
     fn = ns.get(func_name)
     if not callable(fn):
-        raise UserCodeError(f"[{label}] '{func_name}' 함수가 정의되어 있지 않습니다.")
+        raise UserCodeError(f"[{label}] Function '{func_name}' is not defined.")
     with _lock:
         _cache[key] = fn
     return fn
@@ -73,7 +73,7 @@ def call_user(fn, label: str, *args, **kwargs):
     except UserCodeError:
         raise
     except Exception as e:
-        raise UserCodeError(f"[{label}] 실행 오류: {type(e).__name__}: {e}", user_traceback(e, label)) from e
+        raise UserCodeError(f"[{label}] Runtime error: {type(e).__name__}: {e}", user_traceback(e, label)) from e
 
 
 def to_frame(result, label: str) -> pd.DataFrame:
@@ -90,4 +90,4 @@ def to_frame(result, label: str) -> pd.DataFrame:
             return pd.DataFrame([result])
     if isinstance(result, (list, tuple)):
         return pd.DataFrame(list(result))
-    raise UserCodeError(f"[{label}] 반환값은 DataFrame / list[dict] / dict 이어야 합니다 (받은 타입: {type(result).__name__})")
+    raise UserCodeError(f"[{label}] Must return a DataFrame / list[dict] / dict (got {type(result).__name__})")

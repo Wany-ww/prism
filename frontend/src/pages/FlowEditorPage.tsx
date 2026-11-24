@@ -27,20 +27,20 @@ import { useTheme } from '../theme';
 
 const nodeTypesMap = { op: OpNodeView };
 const PY_DEFAULT = `def run(inputs, params):\n    df = inputs[0]\n    return df\n`;
-const CYPHER_DEFAULT = `// 예) EOL 불량 제품이 거친 Blade 설비별 개수
+const CYPHER_DEFAULT = `// e.g. count of NG products (EOL) per Blade equipment
 MATCH (p:Product {graph: 'product_trace'})-[:PASSED]->(e:Step {stage: 'eol'})
 WHERE e.\`판정\` = 'NG'
 MATCH (p)-[:PASSED]->(b:Step {stage: 'blade'})
 RETURN b.equipment AS blade_equipment, count(p) AS ng_products
 ORDER BY ng_products DESC`;
 const SCHEDULES = [
-  { value: 0, label: '수동 실행' },
-  { value: 1, label: '1분마다' },
-  { value: 5, label: '5분마다' },
-  { value: 10, label: '10분마다' },
-  { value: 30, label: '30분마다' },
-  { value: 60, label: '1시간마다' },
-  { value: 1440, label: '하루마다' },
+  { value: 0, label: 'Manual' },
+  { value: 1, label: 'Every 1 min' },
+  { value: 5, label: 'Every 5 min' },
+  { value: 10, label: 'Every 10 min' },
+  { value: 30, label: 'Every 30 min' },
+  { value: 60, label: 'Every hour' },
+  { value: 1440, label: 'Every day' },
 ];
 
 export default function FlowEditorPage({ kind }: { kind: FlowKind }) {
@@ -116,7 +116,7 @@ function Editor({ kind }: { kind: FlowKind }) {
     if (!meta) return;
     await api.put(`/api/flows/${id}`, { ...meta, kind, graph: graph() });
     setDirty(false);
-    message.success('저장되었습니다.');
+    message.success('Saved.');
   }, [meta, id, kind, graph]);
 
   useEffect(() => {
@@ -172,8 +172,8 @@ function Editor({ kind }: { kind: FlowKind }) {
       const r = await api.post(`/api/flows/${id}/run`);
       setStatus(r.nodes ?? {});
       setMeta((m) => (m ? { ...m, last_status: r.status, last_error: r.error, last_run_at: new Date().toISOString() } : m));
-      if (r.status === 'ok') message.success('실행 완료 · 출력 데이터셋이 저장되었습니다.');
-      else message.error('일부 노드에서 오류가 발생했습니다.');
+      if (r.status === 'ok') message.success('Run complete · output datasets saved.');
+      else message.error('Some nodes failed.');
       loadDatasets();
     } finally {
       setRunningAll(false);
@@ -264,14 +264,14 @@ function Editor({ kind }: { kind: FlowKind }) {
     const custom = cats.map((c) => ({ title: c, items: nodeTypes.filter((n) => n.category === c).map((n) => ({ kind: 'custom' as OpKind, nodeType: n.key, name: n.name, desc: n.description, color: n.color })) }));
     const b = (g: string) => BUILTINS.filter((x) => x.group === g).map((x) => ({ kind: x.kind, nodeType: undefined as string | undefined, name: x.name, desc: x.desc, color: x.color }));
     const head = [
-      { title: '입력', items: b('입력') },
-      { title: '매칭/결합', items: b('매칭/결합') },
+      { title: 'Input', items: b('Input') },
+      { title: 'Match / Combine', items: b('Match / Combine') },
     ];
     const tail = [
-      { title: '코드', items: b('코드') },
-      { title: '출력', items: b('출력') },
+      { title: 'Code', items: b('Code') },
+      { title: 'Output', items: b('Output') },
     ];
-    if (kind === 'match') return [...head, ...custom.filter((c) => c.title !== '분석'), ...tail, ...custom.filter((c) => c.title === '분석')];
+    if (kind === 'match') return [...head, ...custom.filter((c) => c.title !== 'Analysis'), ...tail, ...custom.filter((c) => c.title === 'Analysis')];
     return [head[0], ...custom, head[1], ...tail];
   }, [nodeTypes, kind]);
 
@@ -295,13 +295,13 @@ function Editor({ kind }: { kind: FlowKind }) {
             setDirty(true);
           }}
         />
-        {dirty && <Tag color="orange">저장 안 됨</Tag>}
+        {dirty && <Tag color="orange">Unsaved</Tag>}
         <div style={{ flex: 1 }} />
         <Tooltip title={meta.last_error ? <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{meta.last_error}</pre> : undefined}>
           <Space size={4}>
             {meta.last_status && <StatusTag status={meta.last_status} />}
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              최근 실행 {fmtTime(meta.last_run_at)}
+              Last run {fmtTime(meta.last_run_at)}
             </Typography.Text>
           </Space>
         </Tooltip>
@@ -315,16 +315,16 @@ function Editor({ kind }: { kind: FlowKind }) {
           }}
         />
         <Button icon={<SaveOutlined />} onClick={save} disabled={!dirty}>
-          저장
+          Save
         </Button>
         <Button type="primary" icon={<ThunderboltOutlined />} onClick={runAll} loading={runningAll}>
-          전체 실행 · 저장
+          Run all · save
         </Button>
       </div>
       <div className="flow-shell">
         <div className="flow-palette">
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            드래그하거나 클릭해서 추가
+            Drag or click to add
           </Typography.Text>
           {palette.map((g) => (
             <div key={g.title}>
@@ -399,7 +399,7 @@ function Editor({ kind }: { kind: FlowKind }) {
         <div className={`flow-preview ${collapsed ? 'collapsed' : ''}`} style={collapsed ? undefined : { height: previewH }}>
           <div
             className="flow-preview-resize"
-            title="드래그해서 높이 조절 · 더블클릭하면 기본 크기"
+            title="Drag to resize · double-click to reset"
             onPointerDown={(e) => {
               e.preventDefault();
               const startY = e.clientY;
@@ -426,26 +426,26 @@ function Editor({ kind }: { kind: FlowKind }) {
           />
           <div className="flow-preview-head">
             <Button size="small" type="text" icon={collapsed ? <UpOutlined /> : <DownOutlined />} onClick={() => setCollapsed(!collapsed)} />
-            <b>미리보기</b>
+            <b>Preview</b>
             {selected ? (
               <>
                 <span>{selected.data.label}</span>
                 {preview && (
                   <Tag>
-                    {preview.row_count.toLocaleString()}행 × {preview.columns.length}열 (상위 {Math.min(500, preview.row_count)}행 표시)
+                    {preview.row_count.toLocaleString()} rows × {preview.columns.length} cols (showing top {Math.min(500, preview.row_count)})
                   </Tag>
                 )}
                 <Button size="small" icon={<CaretRightOutlined />} onClick={() => runTo(selected.id)} loading={!!running[selected.id]}>
-                  실행
+                  Run
                 </Button>
               </>
             ) : (
-              <Typography.Text type="secondary">노드를 선택하세요</Typography.Text>
+              <Typography.Text type="secondary">Select a node</Typography.Text>
             )}
           </div>
           {!collapsed && (
             <div className="flow-preview-body">
-              {preview ? <DataGrid data={preview} height={Math.max(60, previewH - 134)} pageSize={100} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="‘여기까지 실행’ 을 누르면 결과가 표시됩니다" />}
+              {preview ? <DataGrid data={preview} height={Math.max(60, previewH - 134)} pageSize={100} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Click ‘Run to here’ to see the result" />}
             </div>
           )}
         </div>
@@ -489,37 +489,37 @@ function FlowInfo({ meta, kind, onChange }: { meta: Meta; kind: FlowKind; onChan
   return (
     <div>
       <Typography.Title level={5} style={{ marginTop: 0 }}>
-        Flow 정보
+        Flow info
       </Typography.Title>
-      <Typography.Text type="secondary">설명</Typography.Text>
+      <Typography.Text type="secondary">Description</Typography.Text>
       <Input.TextArea value={meta.description} autoSize={{ minRows: 2 }} onChange={(e) => onChange({ ...meta, description: e.target.value })} style={{ marginBottom: 16 }} />
-      <Typography.Title level={5}>사용 방법</Typography.Title>
+      <Typography.Title level={5}>How to use</Typography.Title>
       {kind === 'match' ? (
         <ol style={{ paddingLeft: 18, color: 'var(--text-2)', fontSize: 13, lineHeight: 1.7 }}>
           <li>
-            <b>설비 데이터</b> 노드로 공정별 설비를 불러오고 접두어(alias)를 지정합니다.
+            <b>Equipment data</b> 노드로 공정별 설비를 불러오고 접두어(alias)를 지정합니다.
           </li>
           <li>
-            <b>Match</b> 노드의 왼쪽에 앞 공정, 오른쪽에 다음 공정을 연결하고 키 컬럼 쌍을 지정합니다. 재사용되는 키(트레이 등)는 <i>이후 최근접 시각</i> 방식을 씁니다.
+            <b>Match</b> 노드의 왼쪽에 앞 공정, 오른쪽에 다음 공정을 연결하고 키 컬럼 쌍을 지정합니다. 재사용되는 키(트레이 등)는 <i>Nearest after</i> 방식을 씁니다.
           </li>
           <li>Match 결과를 다시 다음 Match 의 왼쪽에 연결해 공정을 이어갑니다.</li>
           <li>
-            <b>출력</b> 노드로 결과를 데이터셋으로 저장하면 Analysis Flow, 대시보드, 제품 Trace 조회에서 사용할 수 있습니다.
+            <b>Output</b> 노드로 결과를 데이터셋으로 저장하면 Analysis Flow, 대시보드, 제품 Trace 조회에서 사용할 수 있습니다.
           </li>
         </ol>
       ) : (
         <ol style={{ paddingLeft: 18, color: 'var(--text-2)', fontSize: 13, lineHeight: 1.7 }}>
           <li>
-            <b>데이터셋</b> 노드로 Match 결과를 불러옵니다.
+            <b>Dataset</b> 노드로 Match 결과를 불러옵니다.
           </li>
-          <li>라이브러리 노드(필터, 계산, 집계, 상관 분석 …)를 연결합니다. 노드 코드는 ‘노드 라이브러리’에서 Python 으로 수정/추가할 수 있습니다.</li>
+          <li>라이브러리 노드(필터, 계산, 집계, 상관 분석 …)를 연결합니다. 노드 코드는 ‘Node Library’ 에서 Python 으로 수정/추가할 수 있습니다.</li>
           <li>
-            <b>출력</b> 노드로 결과를 저장해 대시보드에서 사용합니다.
+            <b>Output</b> 노드로 결과를 저장해 대시보드에서 사용합니다.
           </li>
         </ol>
       )}
       <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
-        단축키: Ctrl+S 저장 · Delete 선택 삭제 · 노드 선택 후 ‘여기까지 실행’ 으로 중간 결과 확인
+        Shortcuts: Ctrl+S save · Delete removes selection · select a node and ‘Run to here’ to check intermediate results
       </Typography.Paragraph>
     </div>
   );

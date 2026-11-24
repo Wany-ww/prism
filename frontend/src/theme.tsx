@@ -1,5 +1,5 @@
 import { ConfigProvider, theme as antdTheme, ThemeConfig } from 'antd';
-import koKR from 'antd/locale/ko_KR';
+import enUS from 'antd/locale/en_US';
 import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 
 export type Mode = 'light' | 'dark';
@@ -116,7 +116,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const cfg = mode === 'dark' ? dark : light;
   return (
     <ThemeCtx.Provider value={{ mode, toggle: () => setMode((m) => (m === 'dark' ? 'light' : 'dark')) }}>
-      <ConfigProvider locale={koKR} theme={{ ...cfg, components: components(mode) }}>
+      <ConfigProvider locale={enUS} theme={{ ...cfg, components: components(mode) }}>
         {children}
       </ConfigProvider>
     </ThemeCtx.Provider>

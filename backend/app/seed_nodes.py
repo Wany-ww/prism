@@ -3,12 +3,12 @@
 NODE_LIBRARY = [
     {
         "key": "filter_rows",
-        "name": "행 필터",
-        "category": "변환",
+        "name": "Filter rows",
+        "category": "Transform",
         "color": "#3182f6",
         "description": "pandas query 식으로 행을 거릅니다. 공백/점이 있는 컬럼명은 `백틱`으로 감싸세요.",
         "params": [
-            {"name": "expr", "label": "조건식", "type": "text", "default": "", "help": "예) `drive.Judge` == 'PASS' and `drive.F14 Area` > 85"},
+            {"name": "expr", "label": "Condition", "type": "text", "default": "", "help": "예) `drive.Judge` == 'PASS' and `drive.F14 Area` > 85"},
         ],
         "code": '''def run(inputs, params):
     df = inputs[0]
@@ -20,13 +20,13 @@ NODE_LIBRARY = [
     },
     {
         "key": "select_columns",
-        "name": "컬럼 선택/이름변경",
-        "category": "변환",
+        "name": "Select / rename columns",
+        "category": "Transform",
         "color": "#3182f6",
         "description": "필요한 컬럼만 남기고 이름을 바꿉니다.",
         "params": [
-            {"name": "columns", "label": "남길 컬럼 (비우면 전체)", "type": "columns", "default": []},
-            {"name": "rename", "label": "이름 변경 (줄마다 원래이름=새이름)", "type": "text", "default": ""},
+            {"name": "columns", "label": "Columns to keep (empty = all)", "type": "columns", "default": []},
+            {"name": "rename", "label": "Rename (one old=new per line)", "type": "text", "default": ""},
         ],
         "code": '''def run(inputs, params):
     df = inputs[0]
@@ -43,13 +43,13 @@ NODE_LIBRARY = [
     },
     {
         "key": "formula",
-        "name": "계산 컬럼",
-        "category": "변환",
+        "name": "Computed column",
+        "category": "Transform",
         "color": "#3182f6",
         "description": "Python 식으로 새 컬럼을 만듭니다. df, pd, np 사용 가능.",
         "params": [
-            {"name": "column", "label": "새 컬럼명", "type": "string", "default": "new_col"},
-            {"name": "expr", "label": "식", "type": "text", "default": "", "help": 'df["eol.F1440 Area"] / df["drive.F14 Area"]'},
+            {"name": "column", "label": "New column name", "type": "string", "default": "new_col"},
+            {"name": "expr", "label": "Expression", "type": "text", "default": "", "help": 'df["eol.F1440 Area"] / df["drive.F14 Area"]'},
         ],
         "code": '''def run(inputs, params):
     df = inputs[0].copy()
@@ -59,13 +59,13 @@ NODE_LIBRARY = [
     },
     {
         "key": "dropna",
-        "name": "결측 제거",
-        "category": "변환",
+        "name": "Drop missing",
+        "category": "Transform",
         "color": "#3182f6",
         "description": "지정 컬럼에 빈 값이 있는 행을 제거합니다.",
         "params": [
-            {"name": "columns", "label": "검사 컬럼 (비우면 전체)", "type": "columns", "default": []},
-            {"name": "how", "label": "조건", "type": "select", "options": ["any", "all"], "default": "any"},
+            {"name": "columns", "label": "Columns to check (empty = all)", "type": "columns", "default": []},
+            {"name": "how", "label": "Condition", "type": "select", "options": ["any", "all"], "default": "any"},
         ],
         "code": '''def run(inputs, params):
     df = inputs[0]
@@ -75,11 +75,11 @@ NODE_LIBRARY = [
     },
     {
         "key": "to_numeric",
-        "name": "숫자 변환",
-        "category": "변환",
+        "name": "To numeric",
+        "category": "Transform",
         "color": "#3182f6",
         "description": "문자열 컬럼을 숫자로 변환합니다 (변환 불가 값은 빈 값).",
-        "params": [{"name": "columns", "label": "컬럼", "type": "columns", "default": []}],
+        "params": [{"name": "columns", "label": "Columns", "type": "columns", "default": []}],
         "code": '''def run(inputs, params):
     df = inputs[0].copy()
     for c in params.get("columns") or []:
@@ -89,15 +89,15 @@ NODE_LIBRARY = [
     },
     {
         "key": "normalize_keys",
-        "name": "키 정규화",
-        "category": "매칭 보조",
+        "name": "Normalize keys",
+        "category": "Match helpers",
         "color": "#18a5a5",
         "description": "매칭 전 키 값을 다듬습니다 (공백 제거, 대문자, 정규식 제거, 자릿수 맞춤).",
         "params": [
-            {"name": "columns", "label": "컬럼", "type": "columns", "default": []},
-            {"name": "upper", "label": "대문자 변환", "type": "boolean", "default": True},
-            {"name": "remove", "label": "제거할 정규식", "type": "string", "default": ""},
-            {"name": "zfill", "label": "앞자리 0 채우기 길이", "type": "number", "default": 0},
+            {"name": "columns", "label": "Columns", "type": "columns", "default": []},
+            {"name": "upper", "label": "Uppercase", "type": "boolean", "default": True},
+            {"name": "remove", "label": "Regex to remove", "type": "string", "default": ""},
+            {"name": "zfill", "label": "Zero-pad width", "type": "number", "default": 0},
         ],
         "code": '''def run(inputs, params):
     df = inputs[0].copy()
@@ -115,13 +115,13 @@ NODE_LIBRARY = [
     },
     {
         "key": "sort_limit",
-        "name": "정렬/상위 N",
-        "category": "변환",
+        "name": "Sort / top N",
+        "category": "Transform",
         "color": "#3182f6",
         "description": "컬럼 기준 정렬 후 상위 N행만 남깁니다 (N=0이면 전체).",
         "params": [
-            {"name": "column", "label": "정렬 컬럼", "type": "column", "default": ""},
-            {"name": "ascending", "label": "오름차순", "type": "boolean", "default": False},
+            {"name": "column", "label": "Sort column", "type": "column", "default": ""},
+            {"name": "ascending", "label": "Ascending", "type": "boolean", "default": False},
             {"name": "limit", "label": "N", "type": "number", "default": 0},
         ],
         "code": '''def run(inputs, params):
@@ -134,14 +134,14 @@ NODE_LIBRARY = [
     },
     {
         "key": "time_bucket",
-        "name": "시간 구간",
-        "category": "변환",
+        "name": "Time bucket",
+        "category": "Transform",
         "color": "#3182f6",
         "description": "시간 컬럼을 구간(10분/시간/일)으로 내림해 새 컬럼을 만듭니다.",
         "params": [
-            {"name": "column", "label": "시간 컬럼", "type": "column", "default": ""},
-            {"name": "freq", "label": "구간", "type": "select", "options": ["10min", "30min", "h", "4h", "D"], "default": "h"},
-            {"name": "target", "label": "새 컬럼명", "type": "string", "default": "bucket"},
+            {"name": "column", "label": "Time column", "type": "column", "default": ""},
+            {"name": "freq", "label": "Bucket", "type": "select", "options": ["10min", "30min", "h", "4h", "D"], "default": "h"},
+            {"name": "target", "label": "New column name", "type": "string", "default": "bucket"},
         ],
         "code": '''def run(inputs, params):
     df = inputs[0].copy()
@@ -151,15 +151,15 @@ NODE_LIBRARY = [
     },
     {
         "key": "group_aggregate",
-        "name": "그룹 집계",
-        "category": "분석",
+        "name": "Group aggregate",
+        "category": "Analysis",
         "color": "#fe9800",
         "description": "그룹별 통계(평균/합/개수 등). 그룹 없으면 전체 집계.",
         "params": [
-            {"name": "group_by", "label": "그룹 컬럼", "type": "columns", "default": []},
-            {"name": "columns", "label": "집계 컬럼 (비우면 숫자 전체)", "type": "columns", "default": []},
-            {"name": "func", "label": "함수", "type": "select", "options": ["mean", "median", "sum", "min", "max", "std", "count"], "default": "mean"},
-            {"name": "add_count", "label": "건수 컬럼 추가", "type": "boolean", "default": True},
+            {"name": "group_by", "label": "Group by", "type": "columns", "default": []},
+            {"name": "columns", "label": "Columns to aggregate (empty = all numeric)", "type": "columns", "default": []},
+            {"name": "func", "label": "Function", "type": "select", "options": ["mean", "median", "sum", "min", "max", "std", "count"], "default": "mean"},
+            {"name": "add_count", "label": "Add count column", "type": "boolean", "default": True},
         ],
         "code": '''def run(inputs, params):
     df = inputs[0]
@@ -180,14 +180,14 @@ NODE_LIBRARY = [
     },
     {
         "key": "correlation",
-        "name": "상관 분석",
-        "category": "분석",
+        "name": "Correlation",
+        "category": "Analysis",
         "color": "#fe9800",
         "description": "숫자 컬럼 간 상관계수 행렬 (heatmap 용 matrix 또는 long 형식).",
         "params": [
-            {"name": "columns", "label": "컬럼 (비우면 숫자 전체)", "type": "columns", "default": []},
-            {"name": "method", "label": "방법", "type": "select", "options": ["pearson", "spearman"], "default": "pearson"},
-            {"name": "format", "label": "출력 형식", "type": "select", "options": ["matrix", "long"], "default": "matrix"},
+            {"name": "columns", "label": "Columns (empty = all numeric)", "type": "columns", "default": []},
+            {"name": "method", "label": "Method", "type": "select", "options": ["pearson", "spearman"], "default": "pearson"},
+            {"name": "format", "label": "Output format", "type": "select", "options": ["matrix", "long"], "default": "matrix"},
         ],
         "code": '''def run(inputs, params):
     df = inputs[0]
@@ -203,13 +203,13 @@ NODE_LIBRARY = [
     },
     {
         "key": "regression",
-        "name": "선형 회귀",
-        "category": "분석",
+        "name": "Linear regression",
+        "category": "Analysis",
         "color": "#fe9800",
         "description": "X 컬럼들 × Y 컬럼들 조합별 단순 선형회귀 (n, r, r², 기울기, 절편).",
         "params": [
-            {"name": "x_columns", "label": "X (원인)", "type": "columns", "default": []},
-            {"name": "y_columns", "label": "Y (결과)", "type": "columns", "default": []},
+            {"name": "x_columns", "label": "X (cause)", "type": "columns", "default": []},
+            {"name": "y_columns", "label": "Y (effect)", "type": "columns", "default": []},
         ],
         "code": '''def run(inputs, params):
     df = inputs[0]
@@ -230,11 +230,11 @@ NODE_LIBRARY = [
     },
     {
         "key": "describe",
-        "name": "기술 통계",
-        "category": "분석",
+        "name": "Descriptive stats",
+        "category": "Analysis",
         "color": "#fe9800",
         "description": "컬럼별 개수/평균/표준편차/분위수.",
-        "params": [{"name": "columns", "label": "컬럼 (비우면 숫자 전체)", "type": "columns", "default": []}],
+        "params": [{"name": "columns", "label": "Columns (empty = all numeric)", "type": "columns", "default": []}],
         "code": '''def run(inputs, params):
     df = inputs[0]
     cols = params.get("columns") or list(df.select_dtypes("number").columns)
@@ -245,14 +245,14 @@ NODE_LIBRARY = [
     },
     {
         "key": "outlier_filter",
-        "name": "이상치 제거",
-        "category": "분석",
+        "name": "Remove outliers",
+        "category": "Analysis",
         "color": "#fe9800",
         "description": "σ 또는 IQR 기준으로 이상치 행을 제거합니다.",
         "params": [
-            {"name": "columns", "label": "컬럼", "type": "columns", "default": []},
-            {"name": "method", "label": "방법", "type": "select", "options": ["sigma", "iqr"], "default": "sigma"},
-            {"name": "k", "label": "배수 (σ: 3, IQR: 1.5 권장)", "type": "number", "default": 3},
+            {"name": "columns", "label": "Columns", "type": "columns", "default": []},
+            {"name": "method", "label": "Method", "type": "select", "options": ["sigma", "iqr"], "default": "sigma"},
+            {"name": "k", "label": "Multiplier (σ: 3, IQR: 1.5 suggested)", "type": "number", "default": 3},
         ],
         "code": '''def run(inputs, params):
     df = inputs[0]
@@ -271,8 +271,8 @@ NODE_LIBRARY = [
     },
     {
         "key": "concat_columns",
-        "name": "좌우 붙이기",
-        "category": "변환",
+        "name": "Join side by side",
+        "category": "Transform",
         "color": "#3182f6",
         "inputs": 2,
         "description": "두 입력을 행 순서대로 좌우로 붙입니다.",
@@ -282,3 +282,32 @@ NODE_LIBRARY = [
 ''',
     },
 ]
+
+# 이전(한국어) 기본값 — 기존 DB 의 노드가 아직 이 값이면 영어 기본값으로 바꾼다 (seed.ensure_node_library)
+LEGACY_KO = {'filter_rows': {'name': '행 필터', 'category': '변환', 'labels': {'expr': '조건식'}},
+ 'select_columns': {'name': '컬럼 선택/이름변경',
+                    'category': '변환',
+                    'labels': {'columns': '남길 컬럼 (비우면 전체)', 'rename': '이름 변경 (줄마다 원래이름=새이름)'}},
+ 'formula': {'name': '계산 컬럼', 'category': '변환', 'labels': {'column': '새 컬럼명', 'expr': '식'}},
+ 'dropna': {'name': '결측 제거', 'category': '변환', 'labels': {'columns': '검사 컬럼 (비우면 전체)', 'how': '조건'}},
+ 'to_numeric': {'name': '숫자 변환', 'category': '변환', 'labels': {'columns': '컬럼'}},
+ 'normalize_keys': {'name': '키 정규화',
+                    'category': '매칭 보조',
+                    'labels': {'columns': '컬럼', 'upper': '대문자 변환', 'remove': '제거할 정규식', 'zfill': '앞자리 0 채우기 길이'}},
+ 'sort_limit': {'name': '정렬/상위 N', 'category': '변환', 'labels': {'column': '정렬 컬럼', 'ascending': '오름차순'}},
+ 'time_bucket': {'name': '시간 구간', 'category': '변환', 'labels': {'column': '시간 컬럼', 'freq': '구간', 'target': '새 컬럼명'}},
+ 'group_aggregate': {'name': '그룹 집계',
+                     'category': '분석',
+                     'labels': {'group_by': '그룹 컬럼',
+                                'columns': '집계 컬럼 (비우면 숫자 전체)',
+                                'func': '함수',
+                                'add_count': '건수 컬럼 추가'}},
+ 'correlation': {'name': '상관 분석',
+                 'category': '분석',
+                 'labels': {'columns': '컬럼 (비우면 숫자 전체)', 'method': '방법', 'format': '출력 형식'}},
+ 'regression': {'name': '선형 회귀', 'category': '분석', 'labels': {'x_columns': 'X (원인)', 'y_columns': 'Y (결과)'}},
+ 'describe': {'name': '기술 통계', 'category': '분석', 'labels': {'columns': '컬럼 (비우면 숫자 전체)'}},
+ 'outlier_filter': {'name': '이상치 제거',
+                    'category': '분석',
+                    'labels': {'columns': '컬럼', 'method': '방법', 'k': '배수 (σ: 3, IQR: 1.5 권장)'}},
+ 'concat_columns': {'name': '좌우 붙이기', 'category': '변환', 'labels': {}}}

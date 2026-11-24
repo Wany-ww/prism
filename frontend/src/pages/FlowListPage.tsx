@@ -19,14 +19,14 @@ export default function FlowListPage({ kind }: { kind: FlowKind }) {
   }, [kind]);
 
   const create = async () => {
-    const f = await api.post('/api/flows', { name: name || '새 Flow', kind });
+    const f = await api.post('/api/flows', { name: name || 'New flow', kind });
     nav(`/${kind}/${f.id}`);
   };
   const run = async (f: FlowSummary) => {
     setRunning(f.id);
     try {
       const r = await api.post(`/api/flows/${f.id}/run`);
-      if (r.status === 'ok') message.success(`${f.name} 실행 완료`);
+      if (r.status === 'ok') message.success(`[${f.name}] run complete`);
       else message.error(r.error.split('\n')[0]);
       load();
     } finally {
@@ -41,7 +41,7 @@ export default function FlowListPage({ kind }: { kind: FlowKind }) {
         stage={isMatch ? 'match' : 'analysis'}
         extra={
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>
-            새 Flow
+            New flow
           </Button>
         }
       />
@@ -57,7 +57,7 @@ export default function FlowListPage({ kind }: { kind: FlowKind }) {
         onRow={(f) => ({ onClick: () => nav(`/${kind}/${f.id}`), style: { cursor: 'pointer' } })}
         columns={[
           {
-            title: '이름',
+            title: 'Name',
             dataIndex: 'name',
             render: (v) => (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontWeight: 600 }}>
@@ -68,12 +68,12 @@ export default function FlowListPage({ kind }: { kind: FlowKind }) {
               </span>
             ),
           },
-          { title: '설명', dataIndex: 'description', ellipsis: true, render: (v) => <span className="muted">{v}</span> },
-          { title: '노드', dataIndex: 'node_count', width: 70, align: 'right', className: 'num' },
-          { title: '출력 데이터셋', dataIndex: 'outputs', render: (v: string[]) => v.map((o) => <Tag key={o}>{o}</Tag>) },
-          { title: '자동 실행', dataIndex: 'schedule_minutes', width: 100, render: (v) => (v ? `${v}분마다` : '수동') },
+          { title: 'Description', dataIndex: 'description', ellipsis: true, render: (v) => <span className="muted">{v}</span> },
+          { title: 'Nodes', dataIndex: 'node_count', width: 70, align: 'right', className: 'num' },
+          { title: 'Output datasets', dataIndex: 'outputs', render: (v: string[]) => v.map((o) => <Tag key={o}>{o}</Tag>) },
+          { title: 'Schedule', dataIndex: 'schedule_minutes', width: 100, render: (v) => (v ? `Every ${v} min` : 'Manual') },
           {
-            title: '최근 실행',
+            title: 'Last run',
             width: 230,
             render: (_, f) => (
               <Tooltip title={f.last_error ? <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{f.last_error}</pre> : undefined}>
@@ -89,13 +89,13 @@ export default function FlowListPage({ kind }: { kind: FlowKind }) {
             width: 130,
             render: (_, f) => (
               <Space size={2} onClick={(e) => e.stopPropagation()}>
-                <Tooltip title="실행 · 출력 저장">
+                <Tooltip title="Run · save outputs">
                   <Button type="text" icon={<ThunderboltOutlined />} loading={running === f.id} onClick={() => run(f)} />
                 </Tooltip>
-                <Tooltip title="복제">
+                <Tooltip title="Duplicate">
                   <Button type="text" icon={<CopyOutlined />} onClick={() => api.post(`/api/flows/${f.id}/duplicate`).then(load)} />
                 </Tooltip>
-                <Popconfirm title="삭제할까요?" onConfirm={() => api.del(`/api/flows/${f.id}`).then(load)}>
+                <Popconfirm title="Delete this flow?" onConfirm={() => api.del(`/api/flows/${f.id}`).then(load)}>
                   <Button type="text" danger icon={<DeleteOutlined />} />
                 </Popconfirm>
               </Space>
@@ -103,8 +103,8 @@ export default function FlowListPage({ kind }: { kind: FlowKind }) {
           },
         ]}
       />
-      <Modal open={creating} title="새 Flow" onOk={create} onCancel={() => setCreating(false)} okText="만들기">
-        <Input autoFocus placeholder="Flow 이름" value={name} onChange={(e) => setName(e.target.value)} onPressEnter={create} />
+      <Modal open={creating} title="New flow" onOk={create} onCancel={() => setCreating(false)} okText="Create">
+        <Input autoFocus placeholder="Flow name" value={name} onChange={(e) => setName(e.target.value)} onPressEnter={create} />
       </Modal>
     </div>
   );

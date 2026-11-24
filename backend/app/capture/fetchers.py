@@ -50,7 +50,7 @@ def render(tpl: str, eq, day: datetime) -> str:
     try:
         return tpl.format(date=day, **template_vars(eq))
     except (KeyError, IndexError, ValueError) as e:
-        raise CaptureError(f"경로 템플릿 오류 '{tpl}': {e}") from e
+        raise CaptureError(f"Path template error [{tpl}]: {e}") from e
 
 
 def candidate_locations(eq, today: datetime | None = None) -> list[tuple[str, str]]:
@@ -161,7 +161,7 @@ class FtpFetcher:
             if opts.get("ftp_passive", True) is False:
                 self.ftp.set_pasv(False)
         except (OSError, ftplib.Error) as e:
-            raise CaptureError(f"FTP 접속 실패 {eq.ip}: {e}") from e
+            raise CaptureError(f"FTP connection failed {eq.ip}: {e}") from e
 
     join = staticmethod(posixpath.join)
 
@@ -243,7 +243,7 @@ class SftpFetcher:
             )
             self.sftp = self.client.open_sftp()
         except Exception as e:
-            raise CaptureError(f"SFTP 접속 실패 {eq.ip}: {e}") from e
+            raise CaptureError(f"SFTP connection failed {eq.ip}: {e}") from e
 
     join = staticmethod(posixpath.join)
 
@@ -284,7 +284,7 @@ FETCHERS = {"fs": FsFetcher, "ftp": FtpFetcher, "sftp": SftpFetcher}
 def open_fetcher(eq):
     cls = FETCHERS.get(eq.access_method)
     if cls is None:
-        raise CaptureError(f"'{eq.access_method}' 방식은 서버가 직접 가져올 수 없습니다 (agent 방식은 에이전트가 전송).")
+        raise CaptureError(f"The server can't fetch '{eq.access_method}' itself (with the agent method the agent pushes files).")
     f = cls(eq)
     try:
         yield f

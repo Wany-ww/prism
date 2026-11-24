@@ -9,27 +9,27 @@ function summary(d: OpNode['data'], ctx: ReturnType<typeof useFlowCtx>): string[
   switch (d.kind) {
     case 'source': {
       const names = (p.equipment_ids ?? []).map((id: number) => ctx.equipment.find((e) => e.id === id)?.name ?? `#${id}`);
-      const out = [names.length ? names.join(', ') : '설비 미선택'];
-      if (p.alias) out.push(`접두어: ${p.alias}.`);
-      if (p.days) out.push(`최근 ${p.days}일`);
+      const out = [names.length ? names.map((n: string) => `[${n}]`).join(', ') : 'No equipment selected'];
+      if (p.alias) out.push(`Prefix: ${p.alias}.`);
+      if (p.days) out.push(`Last ${p.days} days`);
       return out;
     }
     case 'match': {
       const keys = (p.keys ?? []).filter((k: any) => k.left && k.right).map((k: any) => `${k.left} ↔ ${k.right}`);
-      const strat: Record<string, string> = { exact: '정확히 일치', nearest_after: '이후 최근접 시각', nearest_before: '이전 최근접 시각', nearest: '최근접 시각' };
-      const how: Record<string, string> = { inner: '양쪽 모두', left: '왼쪽 기준', outer: '전체' };
-      return [...(keys.length ? keys : ['키 미지정']), `${strat[p.strategy ?? 'exact']} · ${how[p.how ?? 'inner']}`];
+      const strat: Record<string, string> = { exact: 'Exact match', nearest_after: 'Nearest after', nearest_before: 'Nearest before', nearest: 'Nearest time' };
+      const how: Record<string, string> = { inner: 'Both sides', left: 'Keep left', outer: 'Keep all' };
+      return [...(keys.length ? keys : ['No keys set']), `${strat[p.strategy ?? 'exact']} · ${how[p.how ?? 'inner']}`];
     }
     case 'dataset':
     case 'output':
-      return [p.name ? `📦 ${p.name}` : '이름 미지정'];
+      return [p.name ? `📦 ${p.name}` : 'No name set'];
     case 'python':
-      return [`${(p.code ?? '').split('\n').length}줄 코드`];
+      return [`${(p.code ?? '').split('\n').length} lines of code`];
     case 'graph':
-      return [p.name ? `🕸 ${p.name}` : '그래프 이름 미지정', `제품 키: ${p.product_key || '-'}`, ...(p.resources ? [`공유 자원: ${String(p.resources).split('\n').filter(Boolean).length}개`] : [])];
+      return [p.name ? `🕸 ${p.name}` : 'No graph name set', `Product key: ${p.product_key || '-'}`, ...(p.resources ? [`Shared resources: ${String(p.resources).split('\n').filter(Boolean).length}`] : [])];
     case 'cypher': {
       const first = String(p.query ?? '').split('\n').find((l) => l.trim()) ?? '';
-      return [first.length > 60 ? first.slice(0, 60) + '…' : first || '쿼리 미입력'];
+      return [first.length > 60 ? first.slice(0, 60) + '…' : first || 'No query'];
     }
     case 'custom': {
       const nt = ctx.nodeTypes[d.nodeType ?? ''];
@@ -97,8 +97,8 @@ function OpNodeView({ id, data, selected }: NodeProps<OpNode>) {
           {st.status === 'error'
             ? (st.error ?? '').slice(0, 80)
             : st.status === 'skipped'
-              ? '상위 노드 실패'
-              : `${(st.rows ?? 0).toLocaleString()}행 × ${st.columns?.length ?? 0}열${st.ms !== undefined ? ` · ${st.ms}ms` : ''}`}
+              ? 'Upstream node failed'
+              : `${(st.rows ?? 0).toLocaleString()} rows × ${st.columns?.length ?? 0} cols${st.ms !== undefined ? ` · ${st.ms}ms` : ''}`}
         </div>
       )}
       {data.kind !== 'output' && data.kind !== 'graph' && (

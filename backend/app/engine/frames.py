@@ -75,7 +75,7 @@ def save_dataset(db, name: str, df: pd.DataFrame, flow_id: int | None, node_id: 
 def load_dataset(db, name: str) -> pd.DataFrame:
     ds = db.scalar(select(Dataset).where(Dataset.name == name))
     if ds is None or not os.path.exists(dataset_file(ds.id)):
-        raise KeyError(f"데이터셋 '{name}' 이 없습니다. 해당 Flow를 먼저 실행하세요.")
+        raise KeyError(f"Dataset [{name}] does not exist. Run its flow first.")
     return pd.read_parquet(dataset_file(ds.id))
 
 

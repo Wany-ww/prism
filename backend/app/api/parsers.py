@@ -69,7 +69,7 @@ def get_parser(pid: int, db: Session = Depends(get_db)):
 @router.post("")
 def create_parser(body: ParserIn, db: Session = Depends(get_db)):
     if db.scalar(select(Parser).where(Parser.name == body.name)):
-        raise HTTPException(409, "같은 이름의 Parser가 있습니다.")
+        raise HTTPException(409, "A parser with the same name already exists.")
     p = Parser(name=body.name, description=body.description, code=body.code or PARSER_TEMPLATE)
     db.add(p)
     db.commit()
@@ -80,7 +80,7 @@ def create_parser(body: ParserIn, db: Session = Depends(get_db)):
 def update_parser(pid: int, body: ParserIn, db: Session = Depends(get_db)):
     p = get_or_404(db, Parser, pid)
     if db.scalar(select(Parser).where(Parser.name == body.name, Parser.id != pid)):
-        raise HTTPException(409, "같은 이름의 Parser가 있습니다.")
+        raise HTTPException(409, "A parser with the same name already exists.")
     p.name, p.description, p.code = body.name, body.description, body.code
     db.commit()
     return row_dict(p)
@@ -118,9 +118,9 @@ def test_parser(
         elif server_path:
             path = source = server_path
             if not os.path.exists(path):
-                return {"ok": False, "error": f"서버에서 파일을 찾을 수 없습니다: {path}"}
+                return {"ok": False, "error": f"File not found on the server: [{path}]"}
         else:
-            return {"ok": False, "error": "테스트할 파일을 업로드하거나 서버 경로를 입력하세요."}
+            return {"ok": False, "error": "Upload a file to test or enter a server path."}
         ctx = parser_context(cfg, source, os.path.getmtime(path))
         if encoding:
             ctx["encoding"] = encoding

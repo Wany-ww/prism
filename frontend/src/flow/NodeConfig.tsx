@@ -25,19 +25,19 @@ export default function NodeConfig({ node, update, setParams, inputCols, onRun, 
         <Typography.Text type="secondary">{kindName(d, ctx.nodeTypes)}</Typography.Text>
         <Space size={4}>
           <Button size="small" type="primary" icon={<CaretRightOutlined />} onClick={onRun} loading={ctx.running[node.id]}>
-            여기까지 실행
+            Run to here
           </Button>
-          <Popconfirm title="노드를 삭제할까요?" onConfirm={onDelete}>
+          <Popconfirm title="Delete this node?" onConfirm={onDelete}>
             <Button size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
       </Space>
       <Form layout="vertical" size="small">
-        <Form.Item label="표시 이름">
+        <Form.Item label="Display name">
           <Input value={d.label} onChange={(e) => update({ label: e.target.value })} />
         </Form.Item>
         {d.kind !== 'source' && d.kind !== 'dataset' && (
-          <Form.Item label="비활성화 (입력을 그대로 통과)">
+          <Form.Item label="Disable (pass input through)">
             <Switch checked={!!d.disabled} onChange={(v) => update({ disabled: v })} />
           </Form.Item>
         )}
@@ -45,16 +45,16 @@ export default function NodeConfig({ node, update, setParams, inputCols, onRun, 
         {d.kind === 'source' && <SourceForm p={d.params} set={setParams} />}
         {d.kind === 'match' && <MatchForm p={d.params} set={setParams} left={inputCols('left')} right={inputCols('right')} />}
         {d.kind === 'dataset' && (
-          <Form.Item label="데이터셋" extra="Match/Analysis Flow 의 출력 노드에서 저장된 결과">
+          <Form.Item label="Dataset" extra="Match/Analysis Flow 의 Output 노드에서 저장된 결과">
             <AutoComplete
               value={d.params.name}
               onChange={(v) => setParams({ name: v })}
-              options={ctx.datasets.map((x) => ({ value: x.name, label: `${x.name}  (${x.row_count.toLocaleString()}행 · ${x.flow_name ?? '-'})` }))}
+              options={ctx.datasets.map((x) => ({ value: x.name, label: `${x.name}  (${x.row_count.toLocaleString()} rows · ${x.flow_name ?? '-'})` }))}
             />
           </Form.Item>
         )}
         {d.kind === 'output' && (
-          <Form.Item label="저장할 데이터셋 이름" extra="Flow 실행(저장) 시 이 이름으로 결과가 저장됩니다. 같은 이름은 덮어씁니다.">
+          <Form.Item label="Dataset name to save" extra="Flow 실행(저장) 시 이 이름으로 결과가 저장됩니다. 같은 이름은 덮어씁니다.">
             <AutoComplete value={d.params.name} onChange={(v) => setParams({ name: v })} options={ctx.datasets.map((x) => ({ value: x.name }))} />
           </Form.Item>
         )}
@@ -88,7 +88,7 @@ function SourceForm({ p, set }: { p: Record<string, any>; set: (x: Record<string
 
   return (
     <>
-      <Form.Item label="설비" extra="같은 공정의 여러 설비를 선택하면 하나의 테이블로 합쳐집니다 (_equipment 컬럼으로 구분).">
+      <Form.Item label="Equipment" extra="같은 공정의 여러 설비를 선택하면 하나의 테이블로 합쳐집니다 (_equipment 컬럼으로 구분).">
         <Select
           mode="multiple"
           value={ids}
@@ -99,7 +99,7 @@ function SourceForm({ p, set }: { p: Record<string, any>; set: (x: Record<string
             options: equipment.filter((e) => e.process === pr).map((e) => ({ value: e.id, label: e.name })),
           })).concat(
             equipment.some((e) => !e.process)
-              ? [{ label: '(공정 미지정)', options: equipment.filter((e) => !e.process).map((e) => ({ value: e.id, label: e.name })) }]
+              ? [{ label: '(no process)', options: equipment.filter((e) => !e.process).map((e) => ({ value: e.id, label: e.name })) }]
               : [],
           )}
         />
@@ -111,17 +111,17 @@ function SourceForm({ p, set }: { p: Record<string, any>; set: (x: Record<string
             size="small"
             onClick={() => set({ equipment_ids: [...new Set([...ids, ...equipment.filter((e) => e.process === pr).map((e) => e.id)])] })}
           >
-            + {pr} 전체
+            + all {pr}
           </Button>
         ))}
       </Space>
-      <Form.Item label="컬럼 접두어 (alias)" extra="예) blade → 'blade.Tray No'. 여러 소스를 매칭할 때 컬럼 충돌을 막고 Trace 화면에서 공정별로 묶어 보여줍니다.">
+      <Form.Item label="Column prefix (alias)" extra="예) blade → 'blade.Tray No'. 여러 소스를 매칭할 때 컬럼 충돌을 막고 Trace 화면에서 공정별로 묶어 보여줍니다.">
         <Input value={p.alias} onChange={(e) => set({ alias: e.target.value })} />
       </Form.Item>
-      <Form.Item label="기간 (최근 N일, 비우면 전체)">
+      <Form.Item label="Period (last N days, empty = all)">
         <InputNumber min={0} style={{ width: '100%' }} value={p.days} onChange={(v) => set({ days: v })} />
       </Form.Item>
-      <Form.Item label="사용할 컬럼 (비우면 전체)">
+      <Form.Item label="Columns to use (empty = all)">
         <Select mode="tags" value={p.columns ?? []} onChange={(v) => set({ columns: v })} options={colOptions(fields)} />
       </Form.Item>
     </>
@@ -129,10 +129,10 @@ function SourceForm({ p, set }: { p: Record<string, any>; set: (x: Record<string
 }
 
 const STRATEGIES = [
-  { value: 'exact', label: '정확히 일치', desc: '키가 같은 레코드를 모두 연결 (VAID 처럼 고유한 키)' },
-  { value: 'nearest_after', label: '이후 최근접 시각', desc: '키가 같은 오른쪽 레코드 중 왼쪽 시각 이후 가장 가까운 1건 (트레이처럼 재사용되는 키)' },
-  { value: 'nearest_before', label: '이전 최근접 시각', desc: '왼쪽 시각 이전 가장 가까운 1건' },
-  { value: 'nearest', label: '최근접 시각', desc: '앞뒤 상관없이 가장 가까운 1건' },
+  { value: 'exact', label: 'Exact match', desc: '키가 같은 레코드를 모두 연결 (VAID 처럼 고유한 키)' },
+  { value: 'nearest_after', label: 'Nearest after', desc: '키가 같은 오른쪽 레코드 중 왼쪽 시각 이후 가장 가까운 1건 (트레이처럼 재사용되는 키)' },
+  { value: 'nearest_before', label: 'Nearest before', desc: '왼쪽 시각 이전 가장 가까운 1건' },
+  { value: 'nearest', label: 'Nearest time', desc: '앞뒤 상관없이 가장 가까운 1건' },
 ];
 
 function MatchForm({ p, set, left, right }: { p: Record<string, any>; set: (x: Record<string, any>) => void; left: string[]; right: string[] }) {
@@ -143,68 +143,68 @@ function MatchForm({ p, set, left, right }: { p: Record<string, any>; set: (x: R
   const filter = (i: string, o: any) => String(o?.value).toLowerCase().includes(i.toLowerCase());
   return (
     <>
-      <Form.Item label="매칭 키 (같은 값이면 같은 제품)" extra={!left.length && !right.length ? '입력 컬럼 목록은 상위 노드를 실행하면 나타납니다.' : undefined}>
+      <Form.Item label="Match keys (same value = same product)" extra={!left.length && !right.length ? '입력 컬럼 목록은 상위 노드를 실행하면 나타납니다.' : undefined}>
         {keys.map((k, i) => (
           <Space.Compact key={i} style={{ width: '100%', marginBottom: 6 }}>
-            <AutoComplete style={{ width: '45%' }} placeholder="왼쪽 컬럼" value={k.left} options={colOptions(left)} filterOption={filter} onChange={(v) => setKey(i, { left: v })} />
+            <AutoComplete style={{ width: '45%' }} placeholder="Left column" value={k.left} options={colOptions(left)} filterOption={filter} onChange={(v) => setKey(i, { left: v })} />
             <Button disabled style={{ width: '10%', padding: 0 }}>
               ↔
             </Button>
-            <AutoComplete style={{ width: '45%' }} placeholder="오른쪽 컬럼" value={k.right} options={colOptions(right)} filterOption={filter} onChange={(v) => setKey(i, { right: v })} />
+            <AutoComplete style={{ width: '45%' }} placeholder="Right column" value={k.right} options={colOptions(right)} filterOption={filter} onChange={(v) => setKey(i, { right: v })} />
             <Button icon={<MinusCircleOutlined />} disabled={keys.length === 1} onClick={() => set({ keys: keys.filter((_, j) => j !== i) })} />
           </Space.Compact>
         ))}
         <Button size="small" icon={<PlusOutlined />} onClick={() => set({ keys: [...keys, { left: '', right: '' }] })}>
-          키 추가
+          Add key
         </Button>
       </Form.Item>
-      <Form.Item label="매칭 방식" extra={STRATEGIES.find((s) => s.value === strategy)?.desc}>
+      <Form.Item label="Match strategy" extra={STRATEGIES.find((s) => s.value === strategy)?.desc}>
         <Select value={strategy} onChange={(v) => set({ strategy: v })} options={STRATEGIES} />
       </Form.Item>
       {strategy === 'exact' ? (
-        <Form.Item label="오른쪽 중복 키 처리">
+        <Form.Item label="Duplicate keys on right">
           <Radio.Group
             value={p.duplicates ?? 'all'}
             onChange={(e) => set({ duplicates: e.target.value })}
             options={[
-              { value: 'all', label: '모두 연결' },
-              { value: 'first', label: '첫 레코드' },
-              { value: 'last', label: '마지막 레코드' },
+              { value: 'all', label: 'Link all' },
+              { value: 'first', label: 'First record' },
+              { value: 'last', label: 'Last record' },
             ]}
           />
         </Form.Item>
       ) : (
         <>
           <Space.Compact style={{ width: '100%' }}>
-            <Form.Item label="왼쪽 시간 컬럼" style={{ width: '50%' }}>
-              <AutoComplete allowClear placeholder="자동 (_ts)" value={p.left_time} options={colOptions(tsCols(left))} onChange={(v) => set({ left_time: v || undefined })} />
+            <Form.Item label="Left time column" style={{ width: '50%' }}>
+              <AutoComplete allowClear placeholder="Auto (_ts)" value={p.left_time} options={colOptions(tsCols(left))} onChange={(v) => set({ left_time: v || undefined })} />
             </Form.Item>
-            <Form.Item label="오른쪽 시간 컬럼" style={{ width: '50%' }}>
-              <AutoComplete allowClear placeholder="자동 (_ts)" value={p.right_time} options={colOptions(tsCols(right))} onChange={(v) => set({ right_time: v || undefined })} />
+            <Form.Item label="Right time column" style={{ width: '50%' }}>
+              <AutoComplete allowClear placeholder="Auto (_ts)" value={p.right_time} options={colOptions(tsCols(right))} onChange={(v) => set({ right_time: v || undefined })} />
             </Form.Item>
           </Space.Compact>
-          <Form.Item label="최대 시간 차 (시간, 0=제한 없음)">
+          <Form.Item label="Max time gap (hours, 0 = no limit)">
             <InputNumber min={0} style={{ width: '100%' }} value={p.tolerance_hours} onChange={(v) => set({ tolerance_hours: v })} />
           </Form.Item>
         </>
       )}
-      <Form.Item label="결과에 남길 행">
+      <Form.Item label="Rows to keep">
         <Radio.Group
           value={p.how ?? 'inner'}
           onChange={(e) => set({ how: e.target.value })}
           optionType="button"
           options={[
-            { value: 'inner', label: '매칭된 것만' },
-            { value: 'left', label: '왼쪽 전체' },
-            { value: 'outer', label: '양쪽 전체' },
+            { value: 'inner', label: 'Matched only' },
+            { value: 'left', label: 'All left' },
+            { value: 'outer', label: 'All both' },
           ]}
         />
       </Form.Item>
       <Space size="large">
-        <Form.Item label="키 정규화 (공백·1.0→1)">
+        <Form.Item label="Normalize keys (trim, 1.0→1)">
           <Switch checked={p.normalize ?? true} onChange={(v) => set({ normalize: v })} />
         </Form.Item>
-        <Form.Item label="대소문자 무시">
+        <Form.Item label="Ignore case">
           <Switch checked={!!p.ignore_case} onChange={(v) => set({ ignore_case: v })} />
         </Form.Item>
       </Space>
@@ -220,13 +220,13 @@ const PY_DEFAULT = `def run(inputs, params):
 function PythonForm({ p, set }: { p: Record<string, any>; set: (x: Record<string, any>) => void }) {
   return (
     <>
-      <Form.Item label="입력 개수">
+      <Form.Item label="Number of inputs">
         <InputNumber min={0} max={8} value={p.inputs ?? 1} onChange={(v) => set({ inputs: v })} />
       </Form.Item>
-      <Form.Item label="코드" extra="run(inputs, params) → DataFrame. params 는 아래 변수(JSON). 재사용하려면 노드 라이브러리에 등록하세요.">
+      <Form.Item label="Code" extra="run(inputs, params) → DataFrame. params 는 아래 변수(JSON). 재사용하려면 Node Library 에 등록하세요.">
         <CodeEditor value={p.code ?? PY_DEFAULT} onChange={(code) => set({ code })} height="320px" />
       </Form.Item>
-      <Form.Item label="변수 (JSON → params)">
+      <Form.Item label="Variables (JSON → params)">
         <Input.TextArea
           className="mono"
           autoSize={{ minRows: 2 }}
@@ -250,9 +250,9 @@ function GraphStatusBanner() {
     api.get<GraphStatus>('/api/graph/status').then(setSt).catch(() => undefined);
   }, []);
   if (!st) return null;
-  if (!st.enabled) return <Alert type="warning" showIcon style={{ marginBottom: 12 }} message="Neo4j 가 설정되지 않았습니다" description="backend/.env 에 PRISM_NEO4J_URI / USER / PASSWORD 를 지정하세요." />;
-  if (!st.connected) return <Alert type="error" showIcon style={{ marginBottom: 12 }} message={`Neo4j 연결 실패 (${st.address})`} description={st.error} />;
-  return <Alert type="success" showIcon style={{ marginBottom: 12 }} message={`${st.version} 연결됨 · 그래프 ${st.graphs?.length ?? 0}개`} />;
+  if (!st.enabled) return <Alert type="warning" showIcon style={{ marginBottom: 12 }} message="Neo4j is not configured" description="backend/.env 에 PRISM_NEO4J_URI / USER / PASSWORD 를 지정하세요." />;
+  if (!st.connected) return <Alert type="error" showIcon style={{ marginBottom: 12 }} message={`Can't connect to Neo4j (${st.address})`} description={st.error} />;
+  return <Alert type="success" showIcon style={{ marginBottom: 12 }} message={`Connected to ${st.version} · ${st.graphs?.length ?? 0} graphs`} />;
 }
 
 function GraphForm({ p, set, cols }: { p: Record<string, any>; set: (x: Record<string, any>) => void; cols: string[] }) {
@@ -264,16 +264,16 @@ function GraphForm({ p, set, cols }: { p: Record<string, any>; set: (x: Record<s
     <>
       <GraphStatusBanner />
       <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
-        Flow 를 <b>전체 실행 · 저장</b> 하면 결과를 제품 → 공정 단계 → 설비 / 공유 자원 그래프로 Neo4j 에 다시 씁니다. 제품 Trace 화면의 영향 범위 분석과 그래프 보기에 쓰입니다.
+        Flow 를 <b>Run all · save</b> 하면 결과를 제품 → 공정 단계 → 설비 / 공유 자원 그래프로 Neo4j 에 다시 씁니다. 제품 Trace 화면의 영향 범위 분석과 그래프 보기에 쓰입니다.
       </Typography.Paragraph>
-      <Form.Item label="그래프 이름" extra="제품 Trace 에서 같은 이름의 데이터셋을 조회하면 이 그래프를 함께 사용합니다.">
+      <Form.Item label="Graph name" extra="제품 Trace 에서 같은 이름의 데이터셋을 조회하면 이 그래프를 함께 사용합니다.">
         <Input value={p.name} onChange={(e) => set({ name: e.target.value })} placeholder="product_trace" />
       </Form.Item>
-      <Form.Item label="제품 키 컬럼" extra="제품을 구분하는 값 (예: drive.VAID). 값이 없는 행은 '키 미부여' 제품으로 저장됩니다.">
+      <Form.Item label="Product key column" extra="제품을 구분하는 값 (예: drive.VAID). 값이 없는 행은 'unkeyed' 제품으로 저장됩니다.">
         <AutoComplete value={p.product_key} options={colOptions(cols)} onChange={(v) => set({ product_key: v })} filterOption={(i, o) => String(o?.value).toLowerCase().includes(i.toLowerCase())} />
       </Form.Item>
       <Form.Item
-        label="공유 자원 (줄마다 컬럼=자원종류)"
+        label="Shared resources (one column=type per line)"
         extra="여러 제품이 함께 쓰는 자원(트레이, 지그, 자재 Lot 등). 공정마다 이름이 달라도 같은 자원종류로 묶으면 공정을 넘어 연결됩니다. 예) blade.Tray No=Tray / drive.QRCODE=Tray"
       >
         <Input.TextArea className="mono" autoSize={{ minRows: 2, maxRows: 8 }} value={p.resources} onChange={(e) => set({ resources: e.target.value })} />
@@ -298,10 +298,10 @@ function CypherForm({ p, set }: { p: Record<string, any>; set: (x: Record<string
   return (
     <>
       <GraphStatusBanner />
-      <Form.Item label="Cypher (읽기 전용)" extra="쓰기 쿼리는 거부됩니다. 입력을 연결하면 그 행들이 $rows 로 전달됩니다. 노드 값은 '컬럼.속성' 으로 펼쳐집니다.">
+      <Form.Item label="Cypher (read-only)" extra="쓰기 쿼리는 거부됩니다. 입력을 연결하면 그 행들이 $rows 로 전달됩니다. 노드 값은 '컬럼.속성' 으로 펼쳐집니다.">
         <CodeEditor value={p.query ?? ''} onChange={(query) => set({ query })} height="260px" language="plain" />
       </Form.Item>
-      <Form.Item label="파라미터 (JSON → $이름)">
+      <Form.Item label="Parameters (JSON → $name)">
         <Input.TextArea
           className="mono"
           autoSize={{ minRows: 2 }}
@@ -315,7 +315,7 @@ function CypherForm({ p, set }: { p: Record<string, any>; set: (x: Record<string
           }}
         />
       </Form.Item>
-      <Form.Item label="최대 행 수 (0 = 제한 없음)">
+      <Form.Item label="Max rows (0 = no limit)">
         <InputNumber min={0} style={{ width: '100%' }} value={p.limit} onChange={(v) => set({ limit: v })} />
       </Form.Item>
     </>
@@ -325,7 +325,7 @@ function CypherForm({ p, set }: { p: Record<string, any>; set: (x: Record<string
 function CustomForm({ node, set, cols }: { node: OpNode; set: (x: Record<string, any>) => void; cols: string[] }) {
   const { nodeTypes } = useFlowCtx();
   const nt = nodeTypes[node.data.nodeType ?? ''];
-  if (!nt) return <Alert type="warning" message={`노드 라이브러리에 '${node.data.nodeType}' 가 없습니다.`} />;
+  if (!nt) return <Alert type="warning" message={`[${node.data.nodeType}] is not in the node library.`} />;
   return (
     <>
       {nt.description && <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>{nt.description}</Typography.Paragraph>}
@@ -334,7 +334,7 @@ function CustomForm({ node, set, cols }: { node: OpNode; set: (x: Record<string,
           <ParamField spec={s} value={node.data.params[s.name] ?? s.default} onChange={(v) => set({ [s.name]: v })} columns={cols} />
         </Form.Item>
       ))}
-      {!nt.params.length && <Typography.Text type="secondary">설정 항목이 없습니다.</Typography.Text>}
+      {!nt.params.length && <Typography.Text type="secondary">No settings.</Typography.Text>}
     </>
   );
 }

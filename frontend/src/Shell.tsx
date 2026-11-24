@@ -39,10 +39,10 @@ function GlobalSearch() {
       options: items.map((i) => ({ value: i.value, label: <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><span>{i.label}</span><span className="muted" style={{ fontSize: 12 }}>{i.sub}</span></div>, text: i.label })),
     });
     setOpts([
-      grp('설비', eqs.map((e) => ({ value: `/capture/equipment?eq=${e.id}`, label: e.name, sub: `${e.process} · ${e.ip}` }))),
+      grp('Equipment', eqs.map((e) => ({ value: `/capture/equipment?eq=${e.id}`, label: e.name, sub: `${e.process} · ${e.ip}` }))),
       grp('Flow', flows.map((f) => ({ value: `/${f.kind}/${f.id}`, label: f.name, sub: f.kind === 'match' ? 'Match' : 'Analysis' }))),
-      grp('대시보드', dashes.map((d) => ({ value: `/dashboards/${d.id}`, label: d.name, sub: `위젯 ${d.widget_count}` }))),
-      grp('데이터셋', ds.map((d) => ({ value: `/datasets?name=${encodeURIComponent(d.name)}`, label: d.name, sub: `${d.row_count.toLocaleString()}행` }))),
+      grp('Dashboards', dashes.map((d) => ({ value: `/dashboards/${d.id}`, label: d.name, sub: `${d.widget_count} widgets` }))),
+      grp('Datasets', ds.map((d) => ({ value: `/datasets?name=${encodeURIComponent(d.name)}`, label: d.name, sub: `${d.row_count.toLocaleString()} rows` }))),
       grp('Parser', parsers.map((p) => ({ value: `/capture/parsers?id=${p.id}`, label: p.name }))),
     ]);
   };
@@ -66,7 +66,7 @@ function GlobalSearch() {
       }}
       popupMatchSelectWidth={340}
     >
-      <Input placeholder="설비 · Flow · 대시보드 검색" suffix={<SearchOutlined style={{ color: 'var(--text-3)' }} />} />
+      <Input placeholder="Search equipment · flows · dashboards" suffix={<SearchOutlined style={{ color: 'var(--text-3)' }} />} />
     </AutoComplete>
   );
 }
@@ -115,14 +115,14 @@ export default function Shell({ children }: { children: ReactNode }) {
           </nav>
           <div className="topbar-right">
             <Button type="primary" icon={<PlusOutlined />} onClick={() => nav('/capture/equipment?new=1')}>
-              설비 추가
+              Add equipment
             </Button>
           </div>
         </header>
         <div className={`content ${isWorkspace(loc.pathname) ? 'sub' : ''}`}>{children}</div>
         <footer className="ticker">
           <div className="ticker-label" onClick={() => nav('/capture/equipment')}>
-            수집 현황
+            Capture status
           </div>
           <div className="ticker-viewport">
             {eqs.length > 0 && (
@@ -131,8 +131,8 @@ export default function Shell({ children }: { children: ReactNode }) {
                   const st = statusMeta(e.running ? 'running' : e.status, e.enabled);
                   return (
                     <span key={i} className="ticker-item" onClick={() => nav(`/capture/equipment?eq=${e.id}`)}>
-                      <b>{e.name}</b>
-                      <span className="num">{(e.record_count ?? 0).toLocaleString()}행</span>
+                      <b>[{e.name}]</b>
+                      <span className="num">{(e.record_count ?? 0).toLocaleString()} rows</span>
                       <span style={{ color: st.color }}>{st.label}</span>
                     </span>
                   );
@@ -146,7 +146,7 @@ export default function Shell({ children }: { children: ReactNode }) {
       {panel && (
         <aside className="side-panel">
           <div className="side-panel-head">
-            {panel === 'equipment' ? '설비 수집 현황' : '최근 본 항목'}
+            {panel === 'equipment' ? 'Equipment capture status' : 'Recently viewed'}
             <Button type="text" size="small" icon={<CloseOutlined />} onClick={() => setPanel(null)} />
           </div>
           <div className="side-panel-body">
@@ -165,7 +165,7 @@ export default function Shell({ children }: { children: ReactNode }) {
                       </div>
                     </div>
                     <div className="val num">
-                      {(e.record_count ?? 0).toLocaleString()}행
+                      {(e.record_count ?? 0).toLocaleString()} rows
                       <small style={{ color: st.color }}>{st.label}</small>
                     </div>
                   </div>
@@ -179,7 +179,7 @@ export default function Shell({ children }: { children: ReactNode }) {
                     <div className="name">
                       {r.label}
                       <div className="muted" style={{ fontSize: 12, fontWeight: 400 }}>
-                        {{ match: 'Match Flow', analysis: 'Analysis Flow', dashboard: '대시보드', parser: 'Parser' }[r.kind]}
+                        {{ match: 'Match Flow', analysis: 'Analysis Flow', dashboard: 'Dashboard', parser: 'Parser' }[r.kind]}
                       </div>
                     </div>
                     <CloseOutlined
@@ -192,7 +192,7 @@ export default function Shell({ children }: { children: ReactNode }) {
                   </div>
                 ))
               ) : (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="최근 본 항목이 없어요" style={{ marginTop: 60 }} />
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Nothing viewed yet" style={{ marginTop: 60 }} />
               ))}
           </div>
         </aside>
@@ -202,13 +202,13 @@ export default function Shell({ children }: { children: ReactNode }) {
         <div className={`rail-btn ${panel === 'equipment' ? 'active' : ''}`} onClick={() => flip('equipment')}>
           <ApiOutlined />
           {errors > 0 && <span className="rail-badge">{errors}</span>}
-          설비 현황
+          Equipment
         </div>
         <div className={`rail-btn ${panel === 'recent' ? 'active' : ''}`} onClick={() => flip('recent')}>
           <HistoryOutlined />
-          최근 본
+          Recent
         </div>
-        <div className="theme-btn" onClick={toggle} title={mode === 'dark' ? '라이트 모드' : '다크 모드'}>
+        <div className="theme-btn" onClick={toggle} title={mode === 'dark' ? 'Light mode' : 'Dark mode'}>
           {mode === 'dark' ? <MoonFilled /> : <SunFilled />}
         </div>
       </nav>

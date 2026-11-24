@@ -16,7 +16,7 @@ export default function DashboardListPage() {
     load();
   }, []);
   const create = async () => {
-    const d = await api.post('/api/dashboards', { name: name || '새 대시보드', layout: { widgets: [] } });
+    const d = await api.post('/api/dashboards', { name: name || 'New dashboard', layout: { widgets: [] } });
     nav(`/dashboards/${d.id}?edit=1`);
   };
   return (
@@ -25,11 +25,11 @@ export default function DashboardListPage() {
         stage="present"
         extra={
           <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>
-            새 대시보드
+            New dashboard
           </Button>
         }
       />
-      {!list.length && <Empty description="대시보드가 없어요" style={{ marginTop: 60 }} />}
+      {!list.length && <Empty description="No dashboards yet" style={{ marginTop: 60 }} />}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
         {list.map((d, i) => (
           <div key={d.id} style={{ cursor: 'pointer' }} onClick={() => nav(`/dashboards/${d.id}`)}>
@@ -47,23 +47,23 @@ export default function DashboardListPage() {
             >
               <BarChartOutlined />
               <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
-                <Tooltip title="전체 화면">
+                <Tooltip title="Full screen">
                   <Button size="small" type="text" icon={<ExpandOutlined />} style={{ color: '#fff' }} onClick={() => window.open(`/view/${d.id}`, '_blank')} />
                 </Tooltip>
-                <Popconfirm title="삭제할까요?" onConfirm={() => api.del(`/api/dashboards/${d.id}`).then(load)}>
+                <Popconfirm title="Delete this dashboard?" onConfirm={() => api.del(`/api/dashboards/${d.id}`).then(load)}>
                   <Button size="small" type="text" icon={<DeleteOutlined />} style={{ color: '#fff' }} />
                 </Popconfirm>
               </div>
             </div>
             <div style={{ fontSize: 16, fontWeight: 600, marginTop: 12 }}>{d.name}</div>
             <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-              위젯 {d.widget_count} · {d.refresh_sec ? `${d.refresh_sec}초 자동 갱신` : '수동 갱신'} · {fmtTime(d.updated_at)}
+              {d.widget_count} widgets · {d.refresh_sec ? `Auto-refresh ${d.refresh_sec}s` : 'Manual refresh'} · {fmtTime(d.updated_at)}
             </div>
           </div>
         ))}
       </div>
-      <Modal open={creating} title="새 대시보드" onOk={create} onCancel={() => setCreating(false)} okText="만들기">
-        <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onPressEnter={create} placeholder="이름" />
+      <Modal open={creating} title="New dashboard" onOk={create} onCancel={() => setCreating(false)} okText="Create">
+        <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onPressEnter={create} placeholder="Name" />
       </Modal>
     </div>
   );

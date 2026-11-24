@@ -32,7 +32,7 @@ def _node_type(ctx: RunContext, key: str) -> NodeType:
     if key not in ctx.node_types:
         nt = ctx.db.scalar(select(NodeType).where(NodeType.key == key))
         if nt is None:
-            raise NodeError(f"노드 타입 '{key}' 이 라이브러리에 없습니다.")
+            raise NodeError(f"Node type '{key}' is not in the library.")
         ctx.node_types[key] = nt
     return ctx.node_types[key]
 
@@ -52,7 +52,7 @@ def run_node(ctx: RunContext, data: dict, inputs: list[pd.DataFrame]) -> pd.Data
         return _run_custom(ctx, data, inputs)
     fn = BUILTINS.get(kind)
     if fn is None:
-        raise NodeError(f"알 수 없는 노드 종류: {kind}")
+        raise NodeError(f"Unknown node kind: {kind}")
     return fn(ctx, data.get("params") or {}, inputs)
 
 
@@ -83,7 +83,7 @@ def _topo(node_ids: set[str], edges: list[dict]) -> list[str]:
             if indeg[t] == 0:
                 q.append(t)
     if len(order) != len(node_ids):
-        raise NodeError("그래프에 순환 연결이 있습니다.")
+        raise NodeError("The graph has a cycle.")
     return order
 
 
@@ -106,7 +106,7 @@ def execute_graph(db, graph: dict, target: str | None = None, save: bool = False
             key=lambda e: (e.get("targetHandle") or "", nodes[e["source"]].get("position", {}).get("y", 0)),
         )
         if any(e["source"] not in results for e in ins):
-            status[nid] = {"status": "skipped", "error": "상위 노드가 실패하여 실행하지 않았습니다."}
+            status[nid] = {"status": "skipped", "error": "Skipped because an upstream node failed."}
             continue
         if data.get("disabled"):
             results[nid] = results[ins[0]["source"]] if ins else pd.DataFrame()
@@ -143,7 +143,7 @@ def run_flow(flow_id: int, trigger: str = "manual") -> dict:
     with SessionLocal() as db:
         flow = db.get(Flow, flow_id)
         if flow is None:
-            return {"status": "error", "error": "Flow 없음"}
+            return {"status": "error", "error": "Flow not found"}
         try:
             _, status = execute_graph(db, flow.graph or {}, save=True, flow_id=flow.id)
             errors = [f"{nid}: {s.get('error')}" for nid, s in status.items() if s["status"] == "error"]

@@ -10,7 +10,7 @@ import type { Selection } from '../dashboard/link';
 import { useTrackRecent } from '../recent';
 
 const Grid = WidthProvider(GridLayout);
-const REFRESH = [0, 10, 30, 60, 300, 600].map((v) => ({ value: v, label: v ? (v >= 60 ? `${v / 60}분 갱신` : `${v}초 갱신`) : '자동 갱신 끔' }));
+const REFRESH = [0, 10, 30, 60, 300, 600].map((v) => ({ value: v, label: v ? (v >= 60 ? `Every ${v / 60} min` : `Every ${v}s`) : 'Auto-refresh off' }));
 
 export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) {
   const { id } = useParams();
@@ -53,7 +53,7 @@ export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) 
     const d = await api.put(`/api/dashboards/${id}`, { name: dash.name, description: dash.description, refresh_sec: dash.refresh_sec, layout: { widgets } });
     setDash(d);
     setDirty(false);
-    message.success('저장되었습니다.');
+    message.success('Saved.');
   };
 
   const onLayout = (l: Layout[]) => {
@@ -69,7 +69,7 @@ export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) 
 
   const addWidget = () => {
     const y = widgets.reduce((m, w) => Math.max(m, w.y + w.h), 0);
-    setEditW({ i: `w${Date.now().toString(36)}`, x: 0, y, w: 6, h: 8, type: 'chart', title: '새 위젯', dataset: datasets[0]?.name, chart: { kind: 'line', y: [] } });
+    setEditW({ i: `w${Date.now().toString(36)}`, x: 0, y, w: 6, h: 8, type: 'chart', title: 'New widget', dataset: datasets[0]?.name, chart: { kind: 'line', y: [] } });
   };
 
   if (!dash) return null;
@@ -85,7 +85,7 @@ export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) 
               {dash.name}
             </Typography.Title>
           )}
-          {dirty && <Tag color="orange">저장 안 됨</Tag>}
+          {dirty && <Tag color="orange">Unsaved</Tag>}
         </Space>
         <Space>
           <Select
@@ -102,18 +102,18 @@ export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) 
           {!fullscreen && (
             <>
               <Button icon={<ExpandOutlined />} onClick={() => window.open(`/view/${id}`, '_blank')}>
-                전체 화면
+                Full screen
               </Button>
               {editing && (
                 <Button icon={<PlusOutlined />} onClick={addWidget}>
-                  위젯 추가
+                  Add widget
                 </Button>
               )}
               <Button icon={<EditOutlined />} type={editing ? 'primary' : 'default'} ghost={editing} onClick={() => setEditing(!editing)}>
-                {editing ? '편집 종료' : '편집'}
+                {editing ? 'Done' : 'Edit'}
               </Button>
               <Button type="primary" icon={<SaveOutlined />} onClick={save} disabled={!dirty}>
-                저장
+                Save
               </Button>
             </>
           )}
@@ -126,16 +126,16 @@ export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) 
             <b>{selection.column}</b> = {selection.values.join(', ')}
           </span>
           <span className="muted">
-            · {widgets.find((x) => x.i === selection.source)?.title ?? ''} 에서 선택 · Ctrl+클릭으로 여러 개 · Esc 로 해제
+            · {widgets.find((x) => x.i === selection.source)?.title ?? ''} · Ctrl+click for more · Esc to clear
           </span>
           <Button size="small" type="text" icon={<CloseOutlined />} onClick={() => setSelection(null)}>
-            선택 해제
+            Clear selection
           </Button>
         </div>
       )}
       {!widgets.length && (
         <Typography.Paragraph type="secondary" style={{ textAlign: 'center', marginTop: 60 }}>
-          ‘편집’ → ‘위젯 추가’ 로 차트/테이블/수치를 배치하세요. 위젯은 드래그로 이동하고 모서리로 크기를 조절합니다.
+          ‘Edit’ → ‘Add widget’ 으로 차트/테이블/수치를 배치하세요. 위젯은 드래그로 이동하고 모서리로 크기를 조절합니다.
         </Typography.Paragraph>
       )}
       <div className={editing ? 'editing' : ''}>

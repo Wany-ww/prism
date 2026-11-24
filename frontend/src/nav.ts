@@ -3,37 +3,37 @@ export type StageTab = { label: string; path: string };
 export type Stage = { key: StageKey; label: string; tabs: StageTab[] };
 
 export const STAGES: Stage[] = [
-  { key: 'home', label: '홈', tabs: [{ label: '홈', path: '/' }] },
+  { key: 'home', label: 'Home', tabs: [{ label: 'Home', path: '/' }] },
   {
     key: 'capture',
-    label: '수집',
+    label: 'Capture',
     tabs: [
-      { label: '설비', path: '/capture/equipment' },
+      { label: 'Equipment', path: '/capture/equipment' },
       { label: 'Parser', path: '/capture/parsers' },
     ],
   },
   {
     key: 'match',
-    label: '매칭',
+    label: 'Match',
     tabs: [
       { label: 'Match Flow', path: '/match' },
-      { label: '제품 Trace', path: '/trace' },
+      { label: 'Product Trace', path: '/trace' },
     ],
   },
   {
     key: 'analysis',
-    label: '분석',
+    label: 'Analysis',
     tabs: [
       { label: 'Analysis Flow', path: '/analysis' },
-      { label: '노드 라이브러리', path: '/nodes' },
+      { label: 'Node Library', path: '/nodes' },
     ],
   },
   {
     key: 'present',
-    label: '대시보드',
+    label: 'Dashboard',
     tabs: [
-      { label: '대시보드', path: '/dashboards' },
-      { label: '데이터셋', path: '/datasets' },
+      { label: 'Dashboards', path: '/dashboards' },
+      { label: 'Datasets', path: '/datasets' },
     ],
   },
 ];

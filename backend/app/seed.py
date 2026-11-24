@@ -8,18 +8,42 @@ from .config import ROOT_DIR
 from .db import SessionLocal
 from .engine.flow import run_flow
 from .models import Dashboard, Equipment, Flow, NodeType, Parser
-from .seed_nodes import NODE_LIBRARY
+from .seed_nodes import LEGACY_KO, NODE_LIBRARY
 
 log = logging.getLogger("prism.seed")
 DEMO_LOG_DIR = ROOT_DIR / "demo" / "logs"
 
 
 def ensure_node_library(db):
-    existing = set(db.scalars(select(NodeType.key)))
+    existing = {n.key: n for n in db.scalars(select(NodeType))}
     for spec in NODE_LIBRARY:
-        if spec["key"] not in existing:
+        row = existing.get(spec["key"])
+        if row is None:
             db.add(NodeType(**{"inputs": 1, **spec}))
+        else:
+            _upgrade_labels(row, spec)
     db.commit()
+
+
+def _upgrade_labels(row: NodeType, spec: dict) -> None:
+    """예전 한국어 기본 이름/분류/파라미터 라벨을 그대로 쓰는 노드만 영어 기본값으로 바꾼다 (사용자가 고친 값은 유지)."""
+    old = LEGACY_KO.get(spec["key"])
+    if not old:
+        return
+    if row.name == old["name"]:
+        row.name = spec["name"]
+    if row.category == old["category"]:
+        row.category = spec["category"]
+    new_labels = {p["name"]: p.get("label", "") for p in spec.get("params", [])}
+    params, changed = [], False
+    for p in row.params or []:
+        name = p.get("name")
+        if name in old["labels"] and p.get("label") == old["labels"][name] and new_labels.get(name):
+            p = {**p, "label": new_labels[name]}
+            changed = True
+        params.append(p)
+    if changed:
+        row.params = params  # JSON 컬럼은 새 리스트를 대입해야 변경이 저장됨
 
 
 BLADE_PARSER = '''def parse(path, ctx):

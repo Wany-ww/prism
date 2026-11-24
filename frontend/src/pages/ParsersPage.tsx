@@ -25,7 +25,7 @@ export default function ParsersPage() {
   }, []);
 
   const select = (p: Partial<Parser> | null) => {
-    if (dirty && !confirm('저장하지 않은 변경 사항이 있어요. 버리고 이동할까요?')) return false;
+    if (dirty && !confirm('You have unsaved changes. Discard them and leave?')) return false;
     setCur(p);
     setDirty(false);
     setEditorKey((k) => k + 1);
@@ -53,7 +53,7 @@ export default function ParsersPage() {
 
   const removeFromList = async (p: Parser) => {
     await api.del(`/api/parsers/${p.id}`);
-    message.success(`'${p.name}' Parser를 삭제했어요.`);
+    message.success(`Deleted parser [${p.name}].`);
     if (cur?.id === p.id) {
       setCur(null);
       setDirty(false);
@@ -68,10 +68,10 @@ export default function ParsersPage() {
     <div className="page">
       <StageHeader
         stage="capture"
-        hints={{ '/capture/parsers': <>{list.length}개</> }}
+        hints={{ '/capture/parsers': <>{list.length}</> }}
         extra={
           <Button type="primary" icon={<PlusOutlined />} onClick={() => create()}>
-            새 Parser
+            New parser
           </Button>
         }
       />
@@ -80,16 +80,16 @@ export default function ParsersPage() {
           <Input
             allowClear
             prefix={<SearchOutlined className="muted" />}
-            placeholder="Parser 검색"
+            placeholder="Search parsers"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             style={{ marginBottom: 6, background: 'var(--tile)', border: 'none' }}
           />
           {cur && !cur.id && (
             <div className="list-item active">
-              <div className="t">{cur.name || '새 Parser'}</div>
+              <div className="t">{cur.name || 'New parser'}</div>
               <div className="s" style={{ color: 'var(--orange)' }}>
-                작성 중 · 아직 저장 안 됨
+                Draft · not saved yet
               </div>
             </div>
           )}
@@ -99,17 +99,17 @@ export default function ParsersPage() {
                 <div style={{ minWidth: 0 }}>
                   <div className="t">{p.name}</div>
                   <div className="s">
-                    {p.used_by ? <span style={{ color: 'var(--blue)' }}>{p.used_by}대 사용</span> : '미사용'} · {fmtTime(p.updated_at).slice(5, 16)}
+                    {p.used_by ? <span style={{ color: 'var(--blue)' }}>Used by {p.used_by}</span> : 'Unused'} · {fmtTime(p.updated_at).slice(5, 16)}
                   </div>
                 </div>
                 <div className="row-actions" onClick={(e) => e.stopPropagation()}>
-                  <Tooltip title="복제">
-                    <Button size="small" type="text" icon={<CopyOutlined />} onClick={() => create({ name: `${p.name} (복사)`, description: p.description, code: p.code })} />
+                  <Tooltip title="Duplicate">
+                    <Button size="small" type="text" icon={<CopyOutlined />} onClick={() => create({ name: `${p.name} (copy)`, description: p.description, code: p.code })} />
                   </Tooltip>
                   <Popconfirm
-                    title={`'${p.name}' Parser를 삭제할까요?`}
+                    title={`Delete parser [${p.name}]?`}
                     description={p.used_by ? `사용 중인 설비 ${p.used_by}대는 Parser 미지정 상태가 되어 수집이 멈춰요.` : '사용 중인 설비는 없어요.'}
-                    okText="삭제"
+                    okText="Delete"
                     okButtonProps={{ danger: true }}
                     onConfirm={() => removeFromList(p)}
                   >
@@ -119,16 +119,16 @@ export default function ParsersPage() {
               </div>
             </div>
           ))}
-          {!shown.length && !(cur && !cur.id) && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Parser가 없어요" />}
+          {!shown.length && !(cur && !cur.id) && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No parsers" />}
           <Button type="dashed" block icon={<PlusOutlined />} style={{ marginTop: 6 }} onClick={() => create()}>
-            새 Parser 추가
+            Add parser
           </Button>
         </div>
         {!cur ? (
           <div className="panel" style={{ padding: 48 }}>
             <Empty description="왼쪽에서 Parser를 선택하거나 새로 추가하세요">
               <Button type="primary" icon={<PlusOutlined />} onClick={() => create()}>
-                새 Parser
+                New parser
               </Button>
             </Empty>
           </div>

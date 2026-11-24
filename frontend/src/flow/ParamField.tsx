@@ -32,7 +32,7 @@ export default function ParamField({
           onChange={onChange}
           options={colOptions(columns)}
           filterOption={(i, o) => String(o?.value).toLowerCase().includes(i.toLowerCase())}
-          placeholder="컬럼 선택/입력"
+          placeholder="Select or type a column"
           allowClear
         />
       );
@@ -43,7 +43,7 @@ export default function ParamField({
           value={value ?? []}
           onChange={onChange}
           options={colOptions(columns)}
-          placeholder="컬럼 선택 (직접 입력 가능)"
+          placeholder="Select a column (or type one)"
           style={{ width: '100%' }}
           tokenSeparators={[',']}
         />

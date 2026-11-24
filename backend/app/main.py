@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
     scheduler.stop()
 
 
-app = FastAPI(title="PRISM - 카메라 제조 공정 Tracking", lifespan=lifespan)
+app = FastAPI(title="PRISM - Camera manufacturing process tracking", lifespan=lifespan)
 for r in (equipment.router, parsers.router, flows.router, data.router, agent.router, graph_api.router):
     app.include_router(r)
 

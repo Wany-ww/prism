@@ -8,10 +8,10 @@ import StatusTag, { statusMeta } from '../components/StatusTag';
 import { accentOf } from '../nav';
 
 const STAGE_CARDS: { title: string; desc: string; path: string; icon: ReactNode; grad: string }[] = [
-  { title: 'Capture · 수집', desc: '설비 로그를 Parser(Python)로 읽어 DB 에 저장', path: '/capture/equipment', icon: <ApiOutlined />, grad: 'linear-gradient(135deg,#3182f6,#5aa2ff)' },
-  { title: 'Match · 매칭', desc: '설비 간 키로 같은 제품의 공정 이력을 연결', path: '/match', icon: <BranchesOutlined />, grad: 'linear-gradient(135deg,#18a5a5,#3cc7b8)' },
-  { title: 'Analysis · 분석', desc: 'Python 노드로 가공 · 계산 · 상관 분석', path: '/analysis', icon: <ExperimentOutlined />, grad: 'linear-gradient(135deg,#a234c7,#c86ae0)' },
-  { title: 'Present · 대시보드', desc: '도표와 테이블을 원하는 대로 배치', path: '/dashboards', icon: <DashboardOutlined />, grad: 'linear-gradient(135deg,#f04452,#ff7b6b)' },
+  { title: 'Capture', desc: '설비 로그를 Parser(Python)로 읽어 DB 에 저장', path: '/capture/equipment', icon: <ApiOutlined />, grad: 'linear-gradient(135deg,#3182f6,#5aa2ff)' },
+  { title: 'Match', desc: '설비 간 키로 같은 제품의 공정 이력을 연결', path: '/match', icon: <BranchesOutlined />, grad: 'linear-gradient(135deg,#18a5a5,#3cc7b8)' },
+  { title: 'Analysis', desc: 'Python 노드로 가공 · 계산 · 상관 분석', path: '/analysis', icon: <ExperimentOutlined />, grad: 'linear-gradient(135deg,#a234c7,#c86ae0)' },
+  { title: 'Present', desc: '도표와 테이블을 원하는 대로 배치', path: '/dashboards', icon: <DashboardOutlined />, grad: 'linear-gradient(135deg,#f04452,#ff7b6b)' },
 ];
 
 export default function Overview() {
@@ -46,7 +46,7 @@ export default function Overview() {
       <div className="stage-header">
         <div className="big-tabs">
           <div className={`big-tab ${!proc ? 'active' : ''}`} onClick={() => setProc('')}>
-            전체
+            All
           </div>
           {processes.map((p) => {
             const n = eqs.filter((e) => e.process === p && e.enabled).length;
@@ -56,7 +56,7 @@ export default function Overview() {
                 {p}
                 <span className="hint">
                   <span className="dot" style={{ background: bad ? 'var(--red)' : 'var(--green)' }} />
-                  {n}대 수집 중
+                  {n} capturing
                 </span>
               </div>
             );
@@ -67,15 +67,15 @@ export default function Overview() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <div className="pill-tabs">
           <div className={`pill-tab ${view === 'equipment' ? 'active' : ''}`} onClick={() => setView('equipment')}>
-            설비
+            Equipment
           </div>
           <div className={`pill-tab ${view === 'pipeline' ? 'active' : ''}`} onClick={() => setView('pipeline')}>
-            파이프라인
+            Pipeline
           </div>
         </div>
         <div style={{ fontSize: 15, color: 'var(--text-2)' }}>
-          누적 레코드 <b className="num" style={{ color: 'var(--text-1)' }}>{totalRecords.toLocaleString()}</b>
-          <span className="muted" style={{ marginLeft: 12 }}>최근 1시간 </span>
+          Total records <b className="num" style={{ color: 'var(--text-1)' }}>{totalRecords.toLocaleString()}</b>
+          <span className="muted" style={{ marginLeft: 12 }}>Last hour </span>
           {(() => {
             const n = shown.reduce((s, e) => s + lastHour(e.id), 0);
             return <b className={`num ${n ? 'up' : 'muted'}`}>{n ? `+${n.toLocaleString()}` : '0'}</b>;
@@ -91,7 +91,7 @@ export default function Overview() {
               return (
                 <div key={e.id} className="tile tile-click" onClick={() => nav(`/capture/equipment?eq=${e.id}`)}>
                   <div className="tile-label">
-                    {e.name}
+                    [{e.name}]
                     <span className="dot" style={{ background: st.color }} />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
@@ -119,11 +119,11 @@ export default function Overview() {
       ) : (
         <div className="tiles" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
           {[
-            ['설비 (운영/전체)', ov ? `${ov.equipment_enabled} / ${ov.equipment}` : '-', '/capture/equipment'],
+            ['Equipment (active / total)', ov ? `${ov.equipment_enabled} / ${ov.equipment}` : '-', '/capture/equipment'],
             ['Parser', ov?.parsers ?? '-', '/capture/parsers'],
             ['Match Flow', ov?.flows?.match ?? 0, '/match'],
-            ['Analysis Flow · 노드', ov ? `${ov.flows.analysis ?? 0} · ${ov.node_types}` : '-', '/analysis'],
-            ['데이터셋 · 대시보드', ov ? `${ov.datasets} · ${ov.dashboards}` : '-', '/datasets'],
+            ['Analysis flows · nodes', ov ? `${ov.flows.analysis ?? 0} · ${ov.node_types}` : '-', '/analysis'],
+            ['Datasets · dashboards', ov ? `${ov.datasets} · ${ov.dashboards}` : '-', '/datasets'],
           ].map(([label, value, path]) => (
             <div key={label as string} className="tile tile-click" onClick={() => nav(path as string)}>
               <div className="tile-label">{label}</div>
@@ -134,7 +134,7 @@ export default function Overview() {
       )}
 
       <div className="section-title">
-        Prism 파이프라인
+        PRISM pipeline
         <small>Capture → Match → Analysis → Present</small>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
@@ -153,26 +153,26 @@ export default function Overview() {
       </div>
 
       <div className="section-title">
-        실시간 수집 이력
-        <small>10초마다 갱신</small>
+        LIVE
+        <small>Refreshes every 10s</small>
       </div>
       <div className="pill-tabs" style={{ marginBottom: 8 }}>
         <div className={`pill-tab ${runFilter === 'all' ? 'active' : ''}`} onClick={() => setRunFilter('all')}>
-          전체
+          All
         </div>
         <div className={`pill-tab ${runFilter === 'error' ? 'active' : ''}`} onClick={() => setRunFilter('error')}>
-          오류만
+          Errors only
         </div>
       </div>
       <Table
         rowKey="id"
         pagination={false}
         dataSource={runs}
-        locale={{ emptyText: '수집 이력이 없어요' }}
+        locale={{ emptyText: 'No capture runs yet' }}
         columns={[
           { title: '', width: 50, render: (_, __, i) => <span className="rank">{i + 1}</span> },
           {
-            title: '설비',
+            title: 'Equipment',
             dataIndex: 'equipment',
             render: (v) => {
               const e = eqs.find((x) => x.name === v);
@@ -186,11 +186,11 @@ export default function Overview() {
               );
             },
           },
-          { title: '시작', dataIndex: 'started_at', render: fmtTime, className: 'num' },
-          { title: '트리거', dataIndex: 'trigger', render: (v) => ({ schedule: '주기', manual: '수동', agent: 'Agent', seed: '초기' } as any)[v] ?? v },
-          { title: '상태', dataIndex: 'status', render: (s) => <StatusTag status={s} /> },
-          { title: '파일 (발견/처리)', align: 'right', className: 'num', render: (_, r: any) => `${r.files_found} / ${r.files_parsed}` },
-          { title: '행', dataIndex: 'rows', align: 'right', className: 'num', render: (v) => (v ? <span className="up">+{v.toLocaleString()}</span> : <span className="muted">0</span>) },
+          { title: 'Started', dataIndex: 'started_at', render: fmtTime, className: 'num' },
+          { title: 'Trigger', dataIndex: 'trigger', render: (v) => ({ schedule: 'Schedule', manual: 'Manual', agent: 'Agent', seed: 'Seed' } as any)[v] ?? v },
+          { title: 'Status', dataIndex: 'status', render: (s) => <StatusTag status={s} /> },
+          { title: 'Files (found / parsed)', align: 'right', className: 'num', render: (_, r: any) => `${r.files_found} / ${r.files_parsed}` },
+          { title: 'Rows', dataIndex: 'rows', align: 'right', className: 'num', render: (v) => (v ? <span className="up">+{v.toLocaleString()}</span> : <span className="muted">0</span>) },
         ]}
       />
     </div>
