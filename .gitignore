@@ -9,3 +9,4 @@ demo/logs/
 *.log
 .env
 *.tsbuildinfo
+reference/network.png
