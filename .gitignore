@@ -8,5 +8,6 @@ demo/logs/
 .claude/settings.local.json
 *.log
 .env
+.runtime/
 *.tsbuildinfo
 reference/network.png

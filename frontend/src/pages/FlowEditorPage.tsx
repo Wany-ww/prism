@@ -27,6 +27,12 @@ import { useTheme } from '../theme';
 
 const nodeTypesMap = { op: OpNodeView };
 const PY_DEFAULT = `def run(inputs, params):\n    df = inputs[0]\n    return df\n`;
+const CYPHER_DEFAULT = `// 예) EOL 불량 제품이 거친 Blade 설비별 개수
+MATCH (p:Product {graph: 'product_trace'})-[:PASSED]->(e:Step {stage: 'eol'})
+WHERE e.\`판정\` = 'NG'
+MATCH (p)-[:PASSED]->(b:Step {stage: 'blade'})
+RETURN b.equipment AS blade_equipment, count(p) AS ng_products
+ORDER BY ng_products DESC`;
 const SCHEDULES = [
   { value: 0, label: '수동 실행' },
   { value: 1, label: '1분마다' },
@@ -200,7 +206,11 @@ function Editor({ kind }: { kind: FlowKind }) {
             ? { code: PY_DEFAULT, inputs: 1, vars: {} }
             : k === 'custom' && nt
               ? Object.fromEntries(nt.params.map((p) => [p.name, p.default]))
-              : {};
+              : k === 'graph'
+                ? { name: '', product_key: '', resources: '' }
+                : k === 'cypher'
+                  ? { query: CYPHER_DEFAULT, params: {}, limit: 0 }
+                  : {};
     const label = nt?.name ?? BUILTINS.find((b) => b.kind === k)!.name;
     let position = pos;
     if (!position) {

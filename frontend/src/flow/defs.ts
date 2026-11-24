@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react';
 import type { Node } from '@xyflow/react';
 import type { ColumnMeta, Dataset, Equipment, NodeRunStatus, NodeType } from '../api';
 
-export type OpKind = 'source' | 'dataset' | 'match' | 'union' | 'python' | 'output' | 'custom';
+export type OpKind = 'source' | 'dataset' | 'match' | 'union' | 'python' | 'output' | 'custom' | 'graph' | 'cypher';
 
 export type OpData = {
   kind: OpKind;
@@ -25,6 +25,8 @@ export const BUILTINS: BuiltinDef[] = [
   { kind: 'union', name: '합치기 (Union)', color: '#18a5a5', desc: '여러 입력을 위아래로 이어붙임', group: '매칭/결합' },
   { kind: 'python', name: 'Python 스크립트', color: '#a234c7', desc: '이 Flow 에서만 쓰는 즉석 코드', group: '코드' },
   { kind: 'output', name: '출력 (데이터셋 저장)', color: '#f04452', desc: '결과를 이름 붙여 저장 → 대시보드/다른 Flow 에서 사용', group: '출력' },
+  { kind: 'cypher', name: 'Neo4j 조회 (Cypher)', color: '#03b26c', desc: 'Neo4j 제품 계보 그래프를 Cypher 로 조회해 표로 받음 (읽기 전용)', group: '입력' },
+  { kind: 'graph', name: 'Neo4j 그래프 저장', color: '#03b26c', desc: 'Match 결과를 제품-공정-설비-자원 그래프로 저장 → 영향 범위 분석', group: '출력' },
 ];
 
 export const builtinDef = (k: OpKind) => BUILTINS.find((b) => b.kind === k);
@@ -42,7 +44,10 @@ export function inputHandles(d: OpData, nodeTypes: Record<string, NodeType>): In
     case 'union':
       return [{ id: 'in', multi: true }];
     case 'output':
+    case 'graph':
       return [{ id: 'in' }];
+    case 'cypher':
+      return [{ id: 'in0', label: '$rows' }];
     case 'python': {
       const n = Math.max(0, Number(d.params?.inputs ?? 1));
       return Array.from({ length: n }, (_, i) => ({ id: `in${i}`, label: n > 1 ? `#${i}` : undefined }));

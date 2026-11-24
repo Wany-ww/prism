@@ -58,6 +58,10 @@ EOL_PARSER = '''def parse(path, ctx):
 '''
 
 
+# Neo4j 가 설정되지 않은 환경에서는 이 노드만 실행 시 오류로 표시되고 나머지 Flow 는 정상 동작한다.
+GRAPH_PARAMS = {"name": "product_trace", "product_key": "drive.VAID", "resources": "blade.Tray No=Tray\ndrive.QRCODE=Tray"}
+
+
 def _node(nid, kind, label, x, y, params=None, node_type=None):
     data = {"kind": kind, "label": label, "params": params or {}}
     if node_type:
@@ -108,9 +112,11 @@ def seed_demo(db) -> bool:
                 "how": "left", "strategy": "nearest_after", "tolerance_hours": 12, "normalize": True}),
             _node("m2", "match", "VAID 매칭", 700, 300, {
                 "keys": [{"left": "drive.VAID", "right": "eol.VAID"}], "how": "left", "strategy": "exact", "duplicates": "last", "normalize": True}),
-            _node("out", "output", "제품 Trace 저장", 1000, 300, {"name": "product_trace"}),
+            _node("out", "output", "제품 Trace 저장", 1000, 220, {"name": "product_trace"}),
+            _node("neo", "graph", "제품 계보 그래프", 1000, 400, GRAPH_PARAMS),
         ],
-        "edges": [_edge("blade", "m1", "left"), _edge("drive", "m1", "right"), _edge("m1", "m2", "left"), _edge("eol", "m2", "right"), _edge("m2", "out")],
+        "edges": [_edge("blade", "m1", "left"), _edge("drive", "m1", "right"), _edge("m1", "m2", "left"), _edge("eol", "m2", "right"),
+                  _edge("m2", "out"), _edge("m2", "neo")],
     }
     f_match = Flow(name="제품 공정 Trace (Blade→구동→EOL)", kind="match", graph=match_graph, schedule_minutes=5,
                    description="트레이 재사용을 고려해 Tray No/Position 은 '이후 가장 가까운 시각'으로, VAID 는 정확히 매칭")

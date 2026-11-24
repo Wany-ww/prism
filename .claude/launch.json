@@ -8,6 +8,12 @@
       "port": 8000
     },
     {
+      "name": "neo4j",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts/neo4j.ps1"],
+      "port": 7474
+    },
+    {
       "name": "frontend",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "frontend", "run", "dev"],

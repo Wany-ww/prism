@@ -115,6 +115,37 @@ export type NodeRunStatus = {
   detail?: string;
 };
 
+export type GraphStatus = {
+  enabled: boolean;
+  connected: boolean;
+  address?: string;
+  version?: string;
+  error?: string;
+  graphs?: { graph: string; product_key: string; resources: string[]; updated_at: string; products: number }[];
+};
+
+export type Outcome = { stage: string; field: string; value: string; bad: boolean };
+export type ImpactItem = {
+  product: string;
+  label: string;
+  keyed: boolean;
+  reasons: { via: 'resource' | 'equipment'; kind: string; value: string; stage: string; equipment: string | null; dt: number }[];
+  min_dt: number;
+  shared_resource: boolean;
+  outcomes: Outcome[];
+  bad: boolean;
+};
+export type Impact = {
+  origin: { id: string; label: string; outcomes: Outcome[] };
+  hours: number;
+  total: number;
+  shown: number;
+  by_resource: number;
+  by_equipment: number;
+  bad: number;
+  items: ImpactItem[];
+};
+
 export function fmtTime(s?: string | null) {
   if (!s) return '-';
   return s.replace('T', ' ').slice(0, 19);

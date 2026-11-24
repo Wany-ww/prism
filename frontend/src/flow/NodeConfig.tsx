@@ -1,7 +1,7 @@
 import { Alert, AutoComplete, Button, Divider, Form, Input, InputNumber, Popconfirm, Radio, Select, Space, Switch, Typography } from 'antd';
 import { CaretRightOutlined, DeleteOutlined, MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '../api';
+import { api, GraphStatus } from '../api';
 import CodeEditor from '../components/CodeEditor';
 import { kindName, OpData, OpNode, useFlowCtx } from './defs';
 import ParamField, { colOptions } from './ParamField';
@@ -60,6 +60,8 @@ export default function NodeConfig({ node, update, setParams, inputCols, onRun, 
         )}
         {d.kind === 'union' && <Typography.Paragraph type="secondary">연결된 모든 입력을 위아래로 이어붙입니다. 컬럼이 다르면 빈 값으로 채워집니다.</Typography.Paragraph>}
         {d.kind === 'python' && <PythonForm p={d.params} set={setParams} />}
+        {d.kind === 'graph' && <GraphForm p={d.params} set={setParams} cols={inputCols()} />}
+        {d.kind === 'cypher' && <CypherForm p={d.params} set={setParams} />}
         {d.kind === 'custom' && <CustomForm node={node} set={setParams} cols={inputCols()} />}
       </Form>
       {st?.status === 'error' && (
@@ -237,6 +239,84 @@ function PythonForm({ p, set }: { p: Record<string, any>; set: (x: Record<string
             }
           }}
         />
+      </Form.Item>
+    </>
+  );
+}
+
+function GraphStatusBanner() {
+  const [st, setSt] = useState<GraphStatus | null>(null);
+  useEffect(() => {
+    api.get<GraphStatus>('/api/graph/status').then(setSt).catch(() => undefined);
+  }, []);
+  if (!st) return null;
+  if (!st.enabled) return <Alert type="warning" showIcon style={{ marginBottom: 12 }} message="Neo4j 가 설정되지 않았습니다" description="backend/.env 에 PRISM_NEO4J_URI / USER / PASSWORD 를 지정하세요." />;
+  if (!st.connected) return <Alert type="error" showIcon style={{ marginBottom: 12 }} message={`Neo4j 연결 실패 (${st.address})`} description={st.error} />;
+  return <Alert type="success" showIcon style={{ marginBottom: 12 }} message={`${st.version} 연결됨 · 그래프 ${st.graphs?.length ?? 0}개`} />;
+}
+
+function GraphForm({ p, set, cols }: { p: Record<string, any>; set: (x: Record<string, any>) => void; cols: string[] }) {
+  const addResource = (c: string) => {
+    const lines = String(p.resources ?? '').split('\n').filter(Boolean);
+    if (!lines.some((l) => l.split('=')[0].trim() === c)) set({ resources: [...lines, c].join('\n') });
+  };
+  return (
+    <>
+      <GraphStatusBanner />
+      <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
+        Flow 를 <b>전체 실행 · 저장</b> 하면 결과를 제품 → 공정 단계 → 설비 / 공유 자원 그래프로 Neo4j 에 다시 씁니다. 제품 Trace 화면의 영향 범위 분석과 그래프 보기에 쓰입니다.
+      </Typography.Paragraph>
+      <Form.Item label="그래프 이름" extra="제품 Trace 에서 같은 이름의 데이터셋을 조회하면 이 그래프를 함께 사용합니다.">
+        <Input value={p.name} onChange={(e) => set({ name: e.target.value })} placeholder="product_trace" />
+      </Form.Item>
+      <Form.Item label="제품 키 컬럼" extra="제품을 구분하는 값 (예: drive.VAID). 값이 없는 행은 '키 미부여' 제품으로 저장됩니다.">
+        <AutoComplete value={p.product_key} options={colOptions(cols)} onChange={(v) => set({ product_key: v })} filterOption={(i, o) => String(o?.value).toLowerCase().includes(i.toLowerCase())} />
+      </Form.Item>
+      <Form.Item
+        label="공유 자원 (줄마다 컬럼=자원종류)"
+        extra="여러 제품이 함께 쓰는 자원(트레이, 지그, 자재 Lot 등). 공정마다 이름이 달라도 같은 자원종류로 묶으면 공정을 넘어 연결됩니다. 예) blade.Tray No=Tray / drive.QRCODE=Tray"
+      >
+        <Input.TextArea className="mono" autoSize={{ minRows: 2, maxRows: 8 }} value={p.resources} onChange={(e) => set({ resources: e.target.value })} />
+      </Form.Item>
+      {cols.length > 0 && (
+        <Space wrap style={{ marginTop: -8 }}>
+          {cols
+            .filter((c) => /tray|qr|jig|lot|carrier|pallet|fixture|자재|지그/i.test(c))
+            .slice(0, 8)
+            .map((c) => (
+              <Button key={c} size="small" onClick={() => addResource(c)}>
+                + {c}
+              </Button>
+            ))}
+        </Space>
+      )}
+    </>
+  );
+}
+
+function CypherForm({ p, set }: { p: Record<string, any>; set: (x: Record<string, any>) => void }) {
+  return (
+    <>
+      <GraphStatusBanner />
+      <Form.Item label="Cypher (읽기 전용)" extra="쓰기 쿼리는 거부됩니다. 입력을 연결하면 그 행들이 $rows 로 전달됩니다. 노드 값은 '컬럼.속성' 으로 펼쳐집니다.">
+        <CodeEditor value={p.query ?? ''} onChange={(query) => set({ query })} height="260px" language="plain" />
+      </Form.Item>
+      <Form.Item label="파라미터 (JSON → $이름)">
+        <Input.TextArea
+          className="mono"
+          autoSize={{ minRows: 2 }}
+          defaultValue={JSON.stringify(p.params ?? {}, null, 2)}
+          onBlur={(e) => {
+            try {
+              set({ params: JSON.parse(e.target.value || '{}') });
+            } catch {
+              /* keep previous */
+            }
+          }}
+        />
+      </Form.Item>
+      <Form.Item label="최대 행 수 (0 = 제한 없음)">
+        <InputNumber min={0} style={{ width: '100%' }} value={p.limit} onChange={(v) => set({ limit: v })} />
       </Form.Item>
     </>
   );

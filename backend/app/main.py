@@ -7,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import models  # noqa: F401  (테이블 등록)
 from .api import agent, data, equipment, flows, parsers
+from .api import graph as graph_api
 from .config import FRONTEND_DIST, SCHEDULER_ENABLED, SEED_DEMO
 from .db import Base, engine
 from .scheduler import scheduler
@@ -26,7 +27,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="PRISM - 카메라 제조 공정 Tracking", lifespan=lifespan)
-for r in (equipment.router, parsers.router, flows.router, data.router, agent.router):
+for r in (equipment.router, parsers.router, flows.router, data.router, agent.router, graph_api.router):
     app.include_router(r)
 
 

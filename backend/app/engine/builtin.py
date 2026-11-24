@@ -164,7 +164,50 @@ def node_python(ctx, params: dict, inputs: list[pd.DataFrame]) -> pd.DataFrame:
     return to_frame(call_user(fn, label, [i.copy() for i in inputs], params.get("vars") or {}), label)
 
 
+def node_graph(ctx, params: dict, inputs: list[pd.DataFrame]) -> pd.DataFrame:
+    """Match 결과를 Neo4j 제품 계보 그래프로 저장 (Flow 실행·저장 시에만 기록)."""
+    from .. import graph
+
+    if not inputs:
+        raise NodeError("입력이 연결되지 않았습니다.")
+    df = inputs[0]
+    name = (params.get("name") or "").strip()
+    key = (params.get("product_key") or "").strip()
+    resources = graph.parse_resources(params.get("resources") or "")
+    if not name:
+        raise NodeError("그래프 이름을 지정하세요.")
+    missing = [c for c in [key] + [c for c, _ in resources] if c and c not in df.columns]
+    if missing:
+        raise NodeError(f"입력에 없는 컬럼: {', '.join(missing)}")
+    if ctx.save and graph.enabled():
+        try:
+            graph.export_graph(name, df, key, resources)
+        except graph.GraphError as e:
+            raise NodeError(str(e)) from e
+    return df
+
+
+def node_cypher(ctx, params: dict, inputs: list[pd.DataFrame]) -> pd.DataFrame:
+    """Neo4j 읽기 전용 Cypher 조회. 입력이 연결되면 $rows 로 전달."""
+    from .. import graph
+
+    query = (params.get("query") or "").strip()
+    if not query:
+        raise NodeError("Cypher 쿼리를 입력하세요.")
+    qp = dict(params.get("params") or {})
+    if inputs:
+        qp["rows"] = [{k: graph._clean(v) for k, v in r.items()} for r in inputs[0].head(10000).to_dict("records")]
+    try:
+        rows = graph.run_read(query, qp)
+    except graph.GraphError as e:
+        raise NodeError(str(e)) from e
+    limit = int(params.get("limit") or 0)
+    return pd.json_normalize(rows[:limit] if limit else rows, max_level=1)
+
+
 BUILTINS = {
+    "graph": node_graph,
+    "cypher": node_cypher,
     "source": node_source,
     "match": node_match,
     "union": node_union,

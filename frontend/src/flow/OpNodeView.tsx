@@ -25,6 +25,12 @@ function summary(d: OpNode['data'], ctx: ReturnType<typeof useFlowCtx>): string[
       return [p.name ? `📦 ${p.name}` : '이름 미지정'];
     case 'python':
       return [`${(p.code ?? '').split('\n').length}줄 코드`];
+    case 'graph':
+      return [p.name ? `🕸 ${p.name}` : '그래프 이름 미지정', `제품 키: ${p.product_key || '-'}`, ...(p.resources ? [`공유 자원: ${String(p.resources).split('\n').filter(Boolean).length}개`] : [])];
+    case 'cypher': {
+      const first = String(p.query ?? '').split('\n').find((l) => l.trim()) ?? '';
+      return [first.length > 60 ? first.slice(0, 60) + '…' : first || '쿼리 미입력'];
+    }
     case 'custom': {
       const nt = ctx.nodeTypes[d.nodeType ?? ''];
       if (!nt) return [];
@@ -95,7 +101,7 @@ function OpNodeView({ id, data, selected }: NodeProps<OpNode>) {
               : `${(st.rows ?? 0).toLocaleString()}행 × ${st.columns?.length ?? 0}열${st.ms !== undefined ? ` · ${st.ms}ms` : ''}`}
         </div>
       )}
-      {data.kind !== 'output' && (
+      {data.kind !== 'output' && data.kind !== 'graph' && (
         <Handle type="source" position={Position.Right} id="out" style={{ background: color, width: 10, height: 10 }} />
       )}
     </div>

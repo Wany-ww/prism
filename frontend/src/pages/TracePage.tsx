@@ -2,7 +2,8 @@ import { Alert, Button, Empty, Input, Select, Space, Typography } from 'antd';
 import { RightOutlined, SearchOutlined } from '@ant-design/icons';
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { api, Dataset, FramePayload } from '../api';
+import { api, Dataset, FramePayload, GraphStatus } from '../api';
+import GraphInsights from '../components/GraphInsights';
 import { fmtCell } from '../components/DataGrid';
 import StageHeader from '../components/StageHeader';
 
@@ -34,6 +35,11 @@ export default function TracePage() {
   const [err, setErr] = useState('');
 
   const [sp] = useSearchParams();
+  const [gstat, setGstat] = useState<GraphStatus | null>(null);
+
+  useEffect(() => {
+    api.get<GraphStatus>('/api/graph/status').then(setGstat).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     api.get<Dataset[]>('/api/datasets').then((l) => {
@@ -66,6 +72,15 @@ export default function TracePage() {
   }
 
   const groups = res && res.rows[sel] ? groupRow(res, res.rows[sel]) : [];
+
+  // Neo4j 그래프가 이 데이터셋과 같은 이름으로 저장되어 있으면 영향 범위 분석을 함께 표시
+  const graphMeta = gstat?.connected ? gstat.graphs?.find((g) => g.graph === ds) : undefined;
+  const productId = useMemo(() => {
+    if (!graphMeta || !res?.rows[sel]) return null;
+    const i = res.columns.findIndex((c) => c.name === graphMeta.product_key);
+    const v = i >= 0 ? res.rows[sel][i] : null;
+    return v == null || v === '' ? null : String(v);
+  }, [graphMeta, res, sel]);
 
   return (
     <div className="page">
@@ -153,6 +168,20 @@ export default function TracePage() {
                   </Fragment>
                 ))}
               </div>
+              {graphMeta && productId && (
+                <GraphInsights
+                  graph={graphMeta.graph}
+                  product={productId}
+                  onOpen={(pid) => {
+                    setQ(pid);
+                    search(ds, pid);
+                    window.scrollTo({ top: 0 });
+                  }}
+                />
+              )}
+              {graphMeta === undefined && gstat?.connected === false && gstat.enabled && (
+                <Alert type="warning" showIcon style={{ marginTop: 24 }} message="Neo4j 에 연결할 수 없어 영향 범위 분석을 표시하지 못했어요." description={gstat.error} />
+              )}
             </>
           )}
         </div>

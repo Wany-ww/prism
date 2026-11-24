@@ -128,6 +128,40 @@ Flow는 수동 실행 외에 1분 ~ 1일 주기로 자동 실행할 수 있습�
 - 자동 갱신과 전체 화면 모드(`/view/<id>`, 현장 모니터용)를 지원합니다.
 - 데이터셋은 CSV로 내려받을 수 있습니다.
 
+## Neo4j 제품 계보 그래프 (선택)
+
+Match 결과를 Neo4j 그래프로 복사해 여러 단계를 건너는 추적 질문에 씁니다. 원본 데이터는 관계형 DB에 그대로 있고, Neo4j 를 설정하지 않아도 나머지 기능은 모두 동작합니다.
+
+```
+(:Product)-[:PASSED]->(:Step)-[:NEXT]->(:Step)      제품이 거친 공정 순서
+(:Step)-[:ON]->(:Equipment)                          공정을 수행한 설비
+(:Step)-[:USES]->(:Resource {kind:'Tray'})           여러 제품이 함께 쓴 자원 (트레이, 지그, 자재 Lot …)
+```
+
+- **Neo4j 그래프 저장** 노드 (Match Flow): 제품 키 컬럼과 공유 자원 컬럼을 지정합니다. 공정마다 이름이 달라도 같은 자원 종류로 묶으면 공정을 넘어 연결됩니다 (예: `blade.Tray No=Tray`, `drive.QRCODE=Tray`). Flow 를 실행할 때마다 그래프가 갱신됩니다.
+- **영향 범위 분석** (제품 Trace 화면): 기준 제품과 ±N시간 안에 같은 자원·설비를 공유한 제품을 찾아 판정 결과(NG/FAIL)와 함께 보여줍니다. 불량 제품 하나에서 출하 보류 대상을 찾는 데 씁니다.
+- **공정 이력 그래프**: 기준 제품 – 공정 – 설비 – 공유 자원 – 연관 제품 연결을 그래프로 보여줍니다. 노드를 누르면 그 제품으로 이동합니다.
+- **Neo4j 조회 (Cypher)** 노드 (Analysis Flow): Cypher 결과를 표로 받아 분석·대시보드에 씁니다. 읽기 전용이며 쓰기 쿼리는 거부됩니다. 입력을 연결하면 그 행들이 `$rows` 로 전달됩니다.
+
+```cypher
+// EOL 불량 제품이 거친 Blade 설비별 개수
+MATCH (p:Product {graph: 'product_trace'})-[:PASSED]->(e:Step {stage: 'eol'})
+WHERE e.`판정` = 'NG'
+MATCH (p)-[:PASSED]->(b:Step {stage: 'blade'})
+RETURN b.equipment AS blade_equipment, count(p) AS ng_products
+```
+
+![영향 범위 분석 — FAIL 제품과 같은 트레이를 쓴 제품](docs/screenshots/impact.png)
+
+### 로컬 설치
+
+```powershell
+.\scripts\install-neo4j.ps1   # OpenJDK 21 + Neo4j Community 5.26 설치 (약 350MB, SHA-256 검증), 비밀번호 생성 → backend\.env
+.\scripts\neo4j.ps1           # Neo4j 실행 (bolt://127.0.0.1:7687, 브라우저 http://127.0.0.1:7474)
+```
+
+이미 운영 중인 Neo4j 를 쓰려면 `backend\.env` 에 접속 정보만 넣으면 됩니다.
+
 ## 네트워크 구성과 수집 방식
 
 | 설비 위치 | 방식 |
@@ -166,6 +200,11 @@ python prism_agent.py --server http://<서버IP>:8000 --equipment "Blade 조립�
 | `PRISM_WORKERS` | `4` | 수집 · Flow 동시 실행 수 |
 | `PRISM_AGENT_TOKEN` | (없음) | 설정하면 에이전트 업로드 시 토큰 검사 |
 | `PRISM_SEED_DEMO` | `1` | 빈 DB일 때 데모 시나리오 생성 |
+| `PRISM_NEO4J_URI` | (없음) | 예 `bolt://127.0.0.1:7687`. 비어 있으면 Neo4j 기능 꺼짐 |
+| `PRISM_NEO4J_USER` / `PRISM_NEO4J_PASSWORD` | `neo4j` / (없음) | Neo4j 계정 |
+| `PRISM_NEO4J_DATABASE` | `neo4j` | 사용할 데이터베이스 |
+
+환경변수는 `backend\.env` 파일(`KEY=VALUE`, git 제외)에 적어 두어도 됩니다. 이미 설정된 환경변수가 우선합니다.
 
 ## 구조
 
@@ -173,7 +212,8 @@ python prism_agent.py --server http://<서버IP>:8000 --equipment "Blade 조립�
 backend/app/
   api/          REST API (설비, Parser, Flow, 노드, 데이터셋, 대시보드, Trace, 에이전트)
   capture/      로그 파일 탐색 · 가져오기(fs/ftp/sftp) · 파싱 · 저장
-  engine/       노드 그래프 실행기, 내장 노드(source/match/union/dataset/output/python), 사용자 코드 실행
+  engine/       노드 그래프 실행기, 내장 노드(source/match/union/dataset/output/python/graph/cypher), 사용자 코드 실행
+  graph.py      Neo4j 제품 계보 그래프 저장 · 영향 범위 분석 · Cypher 조회
   models.py     DB 모델 (로그 레코드는 JSON 으로 저장 → 설비별 스키마 변경 불필요)
   scheduler.py  수집 주기 · Flow 자동 실행
   seed*.py      기본 노드 라이브러리 · 데모 시나리오
