@@ -38,7 +38,16 @@ const METHODS = [
   { value: 'sftp', label: 'SFTP' },
   { value: 'agent', label: 'Agent (별도 LAN 게이트웨이 push)' },
 ];
-const ENCODINGS = ['utf-8', 'utf-8-sig', 'cp949', 'euc-kr', 'latin-1'];
+/** 설비 정보 표시 순서 (편집 폼 · 목록 · 상세 공통) */
+const INFO_FIELDS = [
+  ['factory', '공장'],
+  ['product', '제품'],
+  ['customer', '고객사'],
+  ['project', '과제'],
+  ['process', '공정'],
+] as const;
+
+const ENCODINGS =['utf-8', 'utf-8-sig', 'cp949', 'euc-kr', 'latin-1'];
 
 const EMPTY: Partial<Equipment> = {
   access_method: 'fs',
@@ -231,11 +240,7 @@ export default function EquipmentPage() {
             width: 110,
             render: (_, e) => <StatusTag status={e.running ? 'running' : e.status} enabled={e.enabled} />,
           },
-          { title: '공장', dataIndex: 'factory', width: 110 },
-          { title: '고객사', dataIndex: 'customer', width: 100 },
-          { title: '제품', dataIndex: 'product', width: 90 },
-          { title: '과제', dataIndex: 'project', width: 100 },
-          { title: '공정', dataIndex: 'process', width: 100 },
+          ...INFO_FIELDS.map(([k, title]) => ({ title, dataIndex: k, width: k === 'factory' ? 110 : 100 })),
           { title: 'IP', dataIndex: 'ip', width: 110, className: 'num' },
           { title: '방식', dataIndex: 'access_method', width: 70, render: (v) => <span className="muted">{v.toUpperCase()}</span> },
           { title: '주기', dataIndex: 'capture_interval_sec', width: 70, render: (v) => (v >= 60 ? `${Math.round(v / 60)}분` : `${v}초`) },
@@ -422,31 +427,15 @@ function EquipmentForm({
               <Input placeholder="10.10.1.11" />
             </Form.Item>
           </Col>
-          <Col span={8}>
-            <Form.Item name="factory" label="공장">
-              <AutoComplete options={ac('factory')} />
-            </Form.Item>
-          </Col>
-          <Col span={8}>
-            <Form.Item name="customer" label="고객사">
-              <AutoComplete options={ac('customer')} />
-            </Form.Item>
-          </Col>
-          <Col span={8}>
-            <Form.Item name="product" label="제품">
-              <AutoComplete options={ac('product')} />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item name="project" label="과제">
-              <AutoComplete options={ac('project')} />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item name="process" label="공정">
-              <AutoComplete options={ac('process')} />
-            </Form.Item>
-          </Col>
+        </Row>
+        <Row gutter={10} wrap={false}>
+          {INFO_FIELDS.map(([k, label]) => (
+            <Col key={k} flex="1 1 0" style={{ minWidth: 0 }}>
+              <Form.Item name={k} label={label}>
+                <AutoComplete options={ac(k)} />
+              </Form.Item>
+            </Col>
+          ))}
         </Row>
         <Form.Item name="description" label="설명">
           <Input.TextArea autoSize={{ minRows: 1, maxRows: 3 }} />
@@ -699,15 +688,15 @@ function EquipmentDetail({ eq, onClose, onChanged, onDelete }: { eq: Equipment; 
         </Space>
       }
     >
-      <Descriptions size="small" column={4} bordered style={{ marginBottom: 12 }}>
-        <Descriptions.Item label="공장">{eq.factory}</Descriptions.Item>
-        <Descriptions.Item label="고객사">{eq.customer}</Descriptions.Item>
-        <Descriptions.Item label="제품">{eq.product}</Descriptions.Item>
-        <Descriptions.Item label="과제">{eq.project}</Descriptions.Item>
-        <Descriptions.Item label="공정">{eq.process}</Descriptions.Item>
+      <Descriptions size="small" column={5} bordered style={{ marginBottom: 12 }}>
+        {INFO_FIELDS.map(([k, label]) => (
+          <Descriptions.Item key={k} label={label}>
+            {eq[k]}
+          </Descriptions.Item>
+        ))}
         <Descriptions.Item label="IP">{eq.ip}</Descriptions.Item>
         <Descriptions.Item label="Parser">{eq.parser_name}</Descriptions.Item>
-        <Descriptions.Item label="경로" span={2}>
+        <Descriptions.Item label="경로" span={3}>
           <span className="mono">
             {eq.log_path}
             {eq.folder_mode === 'date' ? ' / (날짜 폴더) / ' : ' / '}

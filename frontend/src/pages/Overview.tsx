@@ -52,7 +52,7 @@ export default function Overview() {
             const n = eqs.filter((e) => e.process === p && e.enabled).length;
             const bad = eqs.some((e) => e.process === p && e.enabled && e.status === 'error');
             return (
-              <div key={p} className={`big-tab ${proc === p ? 'active' : ''}`} onClick={() => setProc(p)}>
+              <div key={p} className={`big-tab minor ${proc === p ? 'active' : ''}`} onClick={() => setProc(p)}>
                 {p}
                 <span className="hint">
                   <span className="dot" style={{ background: bad ? 'var(--red)' : 'var(--green)' }} />

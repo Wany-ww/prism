@@ -70,6 +70,7 @@ function Editor({ kind }: { kind: FlowKind }) {
   const [previews, setPreviews] = useState<Record<string, FramePayload>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(true);
+  const [previewH, setPreviewH] = usePreviewHeight();
   const [runningAll, setRunningAll] = useState(false);
   const wrapper = useRef<HTMLDivElement>(null);
 
@@ -395,7 +396,34 @@ function Editor({ kind }: { kind: FlowKind }) {
             <FlowInfo meta={meta} kind={kind} onChange={(m) => { setMeta(m); setDirty(true); }} />
           )}
         </div>
-        <div className={`flow-preview ${collapsed ? 'collapsed' : ''}`}>
+        <div className={`flow-preview ${collapsed ? 'collapsed' : ''}`} style={collapsed ? undefined : { height: previewH }}>
+          <div
+            className="flow-preview-resize"
+            title="드래그해서 높이 조절 · 더블클릭하면 기본 크기"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              const startY = e.clientY;
+              const startH = collapsed ? PREVIEW_MIN_H : previewH;
+              if (collapsed) setCollapsed(false);
+              const el = e.currentTarget;
+              el.setPointerCapture(e.pointerId);
+              document.body.classList.add('resizing-row');
+              const move = (ev: PointerEvent) => setPreviewH(startH + (startY - ev.clientY));
+              const up = () => {
+                el.removeEventListener('pointermove', move);
+                el.removeEventListener('pointerup', up);
+                el.removeEventListener('pointercancel', up);
+                document.body.classList.remove('resizing-row');
+              };
+              el.addEventListener('pointermove', move);
+              el.addEventListener('pointerup', up);
+              el.addEventListener('pointercancel', up);
+            }}
+            onDoubleClick={() => {
+              setCollapsed(false);
+              setPreviewH(PREVIEW_DEFAULT_H);
+            }}
+          />
           <div className="flow-preview-head">
             <Button size="small" type="text" icon={collapsed ? <UpOutlined /> : <DownOutlined />} onClick={() => setCollapsed(!collapsed)} />
             <b>미리보기</b>
@@ -417,7 +445,7 @@ function Editor({ kind }: { kind: FlowKind }) {
           </div>
           {!collapsed && (
             <div className="flow-preview-body">
-              {preview ? <DataGrid data={preview} height={210} pageSize={100} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="‘여기까지 실행’ 을 누르면 결과가 표시됩니다" />}
+              {preview ? <DataGrid data={preview} height={Math.max(60, previewH - 134)} pageSize={100} /> : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="‘여기까지 실행’ 을 누르면 결과가 표시됩니다" />}
             </div>
           )}
         </div>
@@ -425,6 +453,36 @@ function Editor({ kind }: { kind: FlowKind }) {
       </div>
     </FlowContext.Provider>
   );
+}
+
+const PREVIEW_DEFAULT_H = 300;
+const PREVIEW_MIN_H = 160;
+const PREVIEW_KEY = 'prism.flowPreviewHeight';
+
+/** 미리보기 패널 높이: 화면 높이에 맞춰 제한하고 브라우저에 기억 */
+function usePreviewHeight(): [number, (h: number) => void] {
+  const clamp = (h: number) => Math.round(Math.min(Math.max(h, PREVIEW_MIN_H), Math.max(PREVIEW_MIN_H, window.innerHeight - 220)));
+  const [h, setH] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem(PREVIEW_KEY));
+      return v ? clamp(v) : PREVIEW_DEFAULT_H;
+    } catch {
+      return PREVIEW_DEFAULT_H;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(PREVIEW_KEY, String(h));
+    } catch {
+      /* 저장 불가 환경은 무시 */
+    }
+  }, [h]);
+  useEffect(() => {
+    const onResize = () => setH((cur) => clamp(cur));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return [h, (v: number) => setH(clamp(v))];
 }
 
 function FlowInfo({ meta, kind, onChange }: { meta: Meta; kind: FlowKind; onChange: (m: Meta) => void }) {

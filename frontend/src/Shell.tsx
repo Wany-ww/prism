@@ -3,6 +3,7 @@ import { ApiOutlined, CloseOutlined, HistoryOutlined, MoonFilled, PlusOutlined, 
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api, Equipment } from './api';
+import PrismMark from './components/PrismMark';
 import { statusMeta } from './components/StatusTag';
 import { accentOf, isWorkspace, STAGES, stageOf } from './nav';
 import { removeRecent, useRecentList } from './recent';
@@ -101,7 +102,7 @@ export default function Shell({ children }: { children: ReactNode }) {
       <div className="shell-main">
         <header className="topbar">
           <div className="brand" onClick={() => nav('/')}>
-            <span className="brand-mark">◆</span>
+            <PrismMark />
             PRISM
           </div>
           <nav className="topnav">

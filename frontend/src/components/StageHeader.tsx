@@ -10,8 +10,8 @@ export default function StageHeader({ stage, hints, extra }: { stage: StageKey; 
   return (
     <div className="stage-header">
       <div className="big-tabs">
-        {tabs.map((t) => (
-          <div key={t.path} className={`big-tab ${loc.pathname === t.path ? 'active' : ''}`} onClick={() => nav(t.path)}>
+        {tabs.map((t, i) => (
+          <div key={t.path} className={`big-tab ${i > 0 ? 'minor' : ''} ${loc.pathname === t.path ? 'active' : ''}`} onClick={() => nav(t.path)}>
             {t.label}
             {hints?.[t.path] && <span className="hint">{hints[t.path]}</span>}
           </div>
