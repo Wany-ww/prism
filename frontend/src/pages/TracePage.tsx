@@ -1,0 +1,152 @@
+import { Alert, Button, Empty, Input, Select, Space, Typography } from 'antd';
+import { RightOutlined, SearchOutlined } from '@ant-design/icons';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { api, Dataset, FramePayload } from '../api';
+import { fmtCell } from '../components/DataGrid';
+import StageHeader from '../components/StageHeader';
+
+type Group = { name: string; fields: { key: string; value: unknown; dtype: string }[]; ts?: unknown; equipment?: unknown };
+
+function groupRow(data: FramePayload, row: unknown[]): Group[] {
+  const groups: Group[] = [];
+  const idx: Record<string, Group> = {};
+  data.columns.forEach((c, i) => {
+    const dot = c.name.indexOf('.');
+    const g = dot > 0 ? c.name.slice(0, dot) : '기타';
+    const field = dot > 0 ? c.name.slice(dot + 1) : c.name;
+    if (!idx[g]) groups.push((idx[g] = { name: g, fields: [] }));
+    if (field === '_ts') idx[g].ts = row[i];
+    else if (field === '_equipment') idx[g].equipment = row[i];
+    else idx[g].fields.push({ key: field, value: row[i], dtype: c.dtype });
+  });
+  return groups;
+}
+
+export default function TracePage() {
+  const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [ds, setDs] = useState<string>();
+  const [q, setQ] = useState('');
+  const [column, setColumn] = useState<string>();
+  const [mode, setMode] = useState<'exact' | 'contains'>('exact');
+  const [res, setRes] = useState<FramePayload | null>(null);
+  const [sel, setSel] = useState(0);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    api.get<Dataset[]>('/api/datasets').then((l) => {
+      setDatasets(l);
+      const best = l.find((d) => d.name === 'product_trace') ?? l.find((d) => d.columns.some((c) => c.name.includes('.')));
+      setDs(best?.name ?? l[0]?.name);
+    });
+  }, []);
+
+  const cols = useMemo(() => datasets.find((d) => d.name === ds)?.columns.map((c) => c.name) ?? [], [datasets, ds]);
+  const keyCols = cols.filter((c) => /vaid|qr|serial|tray no|lot|id$/i.test(c)).slice(0, 6);
+
+  const search = async () => {
+    if (!ds || !q.trim()) return;
+    setErr('');
+    try {
+      const params = new URLSearchParams({ dataset: ds, q, mode, limit: '50', ...(column ? { column } : {}) });
+      setRes(await api.get(`/api/trace/search?${params}`));
+      setSel(0);
+    } catch (e: any) {
+      setErr(e.message);
+    }
+  };
+
+  const groups = res && res.rows[sel] ? groupRow(res, res.rows[sel]) : [];
+
+  return (
+    <div className="page">
+      <StageHeader stage="match" />
+      <div className="tile" style={{ padding: 20 }}>
+        <Input
+          size="large"
+          placeholder="VAID · QR · Tray No 로 제품을 찾아보세요"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onPressEnter={search}
+          prefix={<SearchOutlined className="muted" />}
+          suffix={
+            <Button type="primary" onClick={search}>
+              조회
+            </Button>
+          }
+          style={{ borderRadius: 14, border: 'none', padding: '8px 8px 8px 16px', fontSize: 16 }}
+        />
+        <Space wrap style={{ marginTop: 12 }}>
+          <Select style={{ width: 200 }} value={ds} onChange={setDs} options={datasets.map((d) => ({ value: d.name, label: d.name }))} placeholder="Match 결과 데이터셋" />
+          <Select allowClear showSearch style={{ width: 220 }} value={column} onChange={setColumn} placeholder="검색 컬럼 (전체)" options={cols.map((c) => ({ value: c, label: c }))} />
+          <div className="pill-tabs">
+            <div className={`pill-tab ${mode === 'exact' ? 'active' : ''}`} style={{ background: mode === 'exact' ? 'var(--panel)' : undefined }} onClick={() => setMode('exact')}>
+              일치
+            </div>
+            <div className={`pill-tab ${mode === 'contains' ? 'active' : ''}`} style={{ background: mode === 'contains' ? 'var(--panel)' : undefined }} onClick={() => setMode('contains')}>
+              포함
+            </div>
+          </div>
+          {keyCols.map((c) => (
+            <span key={c} className="st st-idle" style={{ cursor: 'pointer', background: column === c ? 'var(--blue-soft)' : 'var(--panel)', color: column === c ? 'var(--blue)' : undefined }} onClick={() => setColumn(c)}>
+              {c}
+            </span>
+          ))}
+        </Space>
+      </div>
+      {err && <Alert type="error" message={err} style={{ marginTop: 12 }} />}
+      {res && (
+        <div style={{ marginTop: 24 }}>
+          {res.row_count === 0 ? (
+            <Empty description="일치하는 제품이 없어요" style={{ marginTop: 48 }} />
+          ) : (
+            <>
+              <div className="section-title" style={{ marginTop: 0 }}>
+                공정 이력
+                <small>{res.row_count}건 일치</small>
+              </div>
+              {res.row_count > 1 && (
+                <div className="pill-tabs" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
+                  {res.rows.map((_, i) => (
+                    <div key={i} className={`pill-tab ${i === sel ? 'active' : ''}`} onClick={() => setSel(i)}>
+                      #{i + 1}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', overflowX: 'auto', paddingBottom: 8 }}>
+                {groups.map((g, gi) => (
+                  <Fragment key={g.name}>
+                    {gi > 0 && <RightOutlined style={{ alignSelf: 'center', color: 'var(--text-4)' }} />}
+                    <div className="trace-step" style={{ minWidth: 280 }}>
+                      <h4>
+                        <span className="step-no">{gi + 1}</span>
+                        {g.name}
+                      </h4>
+                      <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 12 }}>
+                        {g.equipment != null && (
+                          <div>
+                            설비 <b style={{ color: 'var(--text-1)' }}>{String(g.equipment)}</b>
+                          </div>
+                        )}
+                        {g.ts != null && <div className="num">{String(g.ts)}</div>}
+                        {g.equipment == null && g.ts == null && g.fields.every((f) => f.value == null) && <Typography.Text type="warning">이 공정 기록 없음</Typography.Text>}
+                      </div>
+                      <div className="kv">
+                        {g.fields.map((f) => (
+                          <Fragment key={f.key}>
+                            <span>{f.key}</span>
+                            <span>{fmtCell(f.value, f.dtype)}</span>
+                          </Fragment>
+                        ))}
+                      </div>
+                    </div>
+                  </Fragment>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
