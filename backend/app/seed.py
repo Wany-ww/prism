@@ -87,12 +87,12 @@ def seed_demo(db) -> bool:
     db.add_all([p_blade, p_drive, p_eol])
     db.flush()
 
-    common = dict(factory="평택 1공장", product="CM-A12", project="A12 양산", access_method="fs", lookback_days=3, capture_interval_sec=60)
+    common = dict(factory="평택 1공장", customer="고객사 A", product="CM-A12", project="A12 양산", access_method="fs", lookback_days=3, capture_interval_sec=60)
     desc = "데모: 로컬 폴더 사용. 실제 운영 시 \\\\{ip}\\Log\\{date:%Y%m%d} 같은 UNC 경로나 FTP/SFTP/Agent 방식 사용"
     eqs = []
     for i in (1, 2):
         eqs.append(Equipment(name=f"Blade 조립기 #{i}", process="Blade 조립", ip=f"10.10.1.{10 + i}", parser_id=p_blade.id,
-                             log_path=f"{base}/blade_{i:02d}/{{date:%Y%m%d}}", file_pattern="Blade_*.csv", description=desc, **common))
+                             log_path=f"{base}/blade_{i:02d}", folder_mode="date", file_pattern="Blade_*.csv", description=desc, **common))
     for i in (1, 2, 3):
         eqs.append(Equipment(name=f"구동 검사기 #{i}", process="구동 검사", ip=f"10.10.2.{10 + i}", parser_id=p_drive.id,
                              log_path=f"{base}/drive_{i:02d}", file_pattern="DriveTest_{date:%Y%m%d}.csv", description=desc, **common))

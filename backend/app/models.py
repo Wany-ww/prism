@@ -41,6 +41,7 @@ class Equipment(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200), unique=True)
     factory: Mapped[str] = mapped_column(String(100), default="")
+    customer: Mapped[str] = mapped_column(String(100), default="")
     product: Mapped[str] = mapped_column(String(100), default="")
     project: Mapped[str] = mapped_column(String(100), default="")
     process: Mapped[str] = mapped_column(String(100), default="")
@@ -51,6 +52,8 @@ class Equipment(Base):
     username: Mapped[str] = mapped_column(String(100), default="")
     password: Mapped[str] = mapped_column(String(200), default="")
     log_path: Mapped[str] = mapped_column(String(500), default="")
+    # flat: log_path 에 파일이 바로 있음 / date: log_path 아래 날짜 폴더(20261124, 2026-11-24, 2026\11\24 …)를 자동 탐색
+    folder_mode: Mapped[str] = mapped_column(String(20), default="flat")
     file_pattern: Mapped[str] = mapped_column(String(200), default="*.csv")
     lookback_days: Mapped[int] = mapped_column(Integer, default=1)
     encoding: Mapped[str] = mapped_column(String(30), default="utf-8")

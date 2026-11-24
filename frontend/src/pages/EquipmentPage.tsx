@@ -42,6 +42,7 @@ const ENCODINGS = ['utf-8', 'utf-8-sig', 'cp949', 'euc-kr', 'latin-1'];
 
 const EMPTY: Partial<Equipment> = {
   access_method: 'fs',
+  folder_mode: 'flat',
   file_pattern: '*.csv',
   lookback_days: 1,
   encoding: 'utf-8',
@@ -49,6 +50,53 @@ const EMPTY: Partial<Equipment> = {
   enabled: true,
   options: {},
 };
+
+/** 삭제 전에 함께 지워질 데이터와 영향받는 Flow 를 보여주고 확인받는다. */
+function useDeleteEquipment(onDone: (deleted: number[]) => void) {
+  const { modal, message } = App.useApp();
+  return async (targets: Equipment[]) => {
+    if (!targets.length) return;
+    const usages = await Promise.all(targets.map((t) => api.get<{ files: number; records: number; flows: { id: number; name: string }[] }>(`/api/equipment/${t.id}/usage`)));
+    const files = usages.reduce((s, u) => s + u.files, 0);
+    const records = usages.reduce((s, u) => s + u.records, 0);
+    const flows = [...new Map(usages.flatMap((u) => u.flows).map((f) => [f.id, f.name])).values()];
+    modal.confirm({
+      title: targets.length === 1 ? `'${targets[0].name}' 설비를 삭제할까요?` : `설비 ${targets.length}대를 삭제할까요?`,
+      width: 460,
+      content: (
+        <div style={{ lineHeight: 1.7 }}>
+          {targets.length > 1 && <div className="muted">{targets.map((t) => t.name).join(', ')}</div>}
+          <div>
+            수집 파일 <b>{files.toLocaleString()}</b>개 · 레코드 <b>{records.toLocaleString()}</b>행이 함께 삭제되며 되돌릴 수 없어요.
+          </div>
+          <div className="muted" style={{ fontSize: 12 }}>로그 원본 파일은 설비에 그대로 남아 있어요.</div>
+          {flows.length > 0 && (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginTop: 10 }}
+              message={`이 설비를 쓰는 Flow ${flows.length}개`}
+              description={<span>{flows.join(', ')} — 설비 데이터 노드에서 선택이 해제돼요.</span>}
+            />
+          )}
+        </div>
+      ),
+      okText: '삭제',
+      okButtonProps: { danger: true },
+      cancelText: '취소',
+      onOk: async () => {
+        try {
+          const r = await api.post('/api/equipment/delete', { ids: targets.map((t) => t.id) });
+          message.success(`설비 ${r.deleted.length}대를 삭제했어요.`);
+          onDone(r.deleted);
+        } catch (e: any) {
+          message.error(e.message);
+          throw e;
+        }
+      },
+    });
+  };
+}
 
 export default function EquipmentPage() {
   const { message } = App.useApp();
@@ -59,11 +107,19 @@ export default function EquipmentPage() {
   const [detail, setDetail] = useState<Equipment | null>(null);
   const [filter, setFilter] = useState({ q: '', process: undefined as string | undefined });
   const [busy, setBusy] = useState<Record<number, boolean>>({});
+  const [selected, setSelected] = useState<number[]>([]);
   const [sp, setSp] = useSearchParams();
 
   const load = useCallback(() => {
     api.get<Equipment[]>('/api/equipment').then(setList);
   }, []);
+  const removeEquipment = useDeleteEquipment((deleted) => {
+    setSelected((s) => s.filter((id) => !deleted.includes(id)));
+    if (detail && deleted.includes(detail.id)) setDetail(null);
+    if (editing?.id && deleted.includes(editing.id)) setEditing(null);
+    load();
+    api.get('/api/equipment/suggestions').then(setSugg);
+  });
 
   // 통합 검색 / 수집 현황 티커 / 레일에서 들어온 링크 처리
   useEffect(() => {
@@ -108,7 +164,7 @@ export default function EquipmentPage() {
       list.filter(
         (e) =>
           (!filter.process || e.process === filter.process) &&
-          (!filter.q || `${e.name} ${e.ip} ${e.factory} ${e.product} ${e.project}`.toLowerCase().includes(filter.q.toLowerCase())),
+          (!filter.q || `${e.name} ${e.ip} ${e.factory} ${e.customer} ${e.product} ${e.project}`.toLowerCase().includes(filter.q.toLowerCase())),
       ),
     [list, filter],
   );
@@ -128,7 +184,12 @@ export default function EquipmentPage() {
         }}
         extra={
           <>
-            <Input placeholder="설비명 · IP · 공장" allowClear prefix={<SearchOutlined className="muted" />} onChange={(e) => setFilter((f) => ({ ...f, q: e.target.value }))} style={{ width: 220 }} />
+            {selected.length > 0 && (
+              <Button danger icon={<DeleteOutlined />} onClick={() => removeEquipment(list.filter((e) => selected.includes(e.id)))}>
+                선택 삭제 ({selected.length})
+              </Button>
+            )}
+            <Input placeholder="설비명 · IP · 공장 · 고객사" allowClear prefix={<SearchOutlined className="muted" />} onChange={(e) => setFilter((f) => ({ ...f, q: e.target.value }))} style={{ width: 240 }} />
             <Button icon={<ReloadOutlined />} onClick={load} />
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing({ ...EMPTY })}>
               설비 추가
@@ -147,7 +208,8 @@ export default function EquipmentPage() {
         rowKey="id"
         dataSource={rows}
         pagination={false}
-        scroll={{ x: 1300 }}
+        scroll={{ x: 1480 }}
+        rowSelection={{ selectedRowKeys: selected, onChange: (keys) => setSelected(keys as number[]), columnWidth: 44, fixed: true }}
         onRow={(e) => ({ onDoubleClick: () => setDetail(e) })}
         columns={[
           {
@@ -170,6 +232,7 @@ export default function EquipmentPage() {
             render: (_, e) => <StatusTag status={e.running ? 'running' : e.status} enabled={e.enabled} />,
           },
           { title: '공장', dataIndex: 'factory', width: 110 },
+          { title: '고객사', dataIndex: 'customer', width: 100 },
           { title: '제품', dataIndex: 'product', width: 90 },
           { title: '과제', dataIndex: 'project', width: 100 },
           { title: '공정', dataIndex: 'process', width: 100 },
@@ -199,10 +262,10 @@ export default function EquipmentPage() {
           },
           {
             title: '',
-            width: 150,
+            width: 176,
             fixed: 'right',
             render: (_, e) => (
-              <Space size={2}>
+              <Space size={2} onDoubleClick={(ev) => ev.stopPropagation()}>
                 <Tooltip title="지금 수집">
                   <Button type="text" icon={<PlayCircleOutlined />} loading={busy[e.id] || e.running} disabled={e.access_method === 'agent'} onClick={() => capture(e)} />
                 </Tooltip>
@@ -212,9 +275,9 @@ export default function EquipmentPage() {
                 <Tooltip title="편집">
                   <Button type="text" icon={<EditOutlined />} onClick={() => setEditing(e)} />
                 </Tooltip>
-                <Popconfirm title={`'${e.name}' 및 수집 데이터를 삭제할까요?`} onConfirm={() => api.del(`/api/equipment/${e.id}`).then(load)}>
-                  <Button type="text" danger icon={<DeleteOutlined />} />
-                </Popconfirm>
+                <Tooltip title="삭제">
+                  <Button type="text" danger icon={<DeleteOutlined />} onClick={() => removeEquipment([e])} />
+                </Tooltip>
               </Space>
             ),
           },
@@ -227,6 +290,7 @@ export default function EquipmentPage() {
           equipment={list}
           reloadParsers={() => api.get<Parser[]>('/api/parsers').then(setParsers)}
           sugg={sugg}
+          onDelete={editing.id ? () => removeEquipment([editing as Equipment]) : undefined}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -235,7 +299,7 @@ export default function EquipmentPage() {
           }}
         />
       )}
-      {detail && <EquipmentDetail eq={detail} onClose={() => setDetail(null)} onChanged={load} />}
+      {detail && <EquipmentDetail eq={detail} onClose={() => setDetail(null)} onChanged={load} onDelete={() => removeEquipment([detail])} />}
     </div>
   );
 }
@@ -246,9 +310,11 @@ function EquipmentForm({
   equipment,
   reloadParsers,
   sugg,
+  onDelete,
   onClose,
   onSaved,
 }: {
+  onDelete?: () => void;
   value: Partial<Equipment>;
   parsers: Parser[];
   equipment: Equipment[];
@@ -264,6 +330,7 @@ function EquipmentForm({
   const [parserDraft, setParserDraft] = useState<Partial<Parser> | null>(null);
   const [parserDirty, setParserDirty] = useState(false);
   const method = Form.useWatch('access_method', form);
+  const folderMode = Form.useWatch('folder_mode', form) ?? value.folder_mode ?? 'flat';
   const parserId = Form.useWatch('parser_id', form);
 
   const openParser = async (mode: 'edit' | 'new') => {
@@ -328,6 +395,11 @@ function EquipmentForm({
       onClose={onClose}
       extra={
         <Space>
+          {onDelete && (
+            <Button danger icon={<DeleteOutlined />} onClick={onDelete}>
+              삭제
+            </Button>
+          )}
           <Button onClick={onClose}>취소</Button>
           <Button type="primary" onClick={save}>
             저장
@@ -350,22 +422,27 @@ function EquipmentForm({
               <Input placeholder="10.10.1.11" />
             </Form.Item>
           </Col>
-          <Col span={6}>
+          <Col span={8}>
             <Form.Item name="factory" label="공장">
               <AutoComplete options={ac('factory')} />
             </Form.Item>
           </Col>
-          <Col span={6}>
+          <Col span={8}>
+            <Form.Item name="customer" label="고객사">
+              <AutoComplete options={ac('customer')} />
+            </Form.Item>
+          </Col>
+          <Col span={8}>
             <Form.Item name="product" label="제품">
               <AutoComplete options={ac('product')} />
             </Form.Item>
           </Col>
-          <Col span={6}>
+          <Col span={12}>
             <Form.Item name="project" label="과제">
               <AutoComplete options={ac('project')} />
             </Form.Item>
           </Col>
-          <Col span={6}>
+          <Col span={12}>
             <Form.Item name="process" label="공정">
               <AutoComplete options={ac('process')} />
             </Form.Item>
@@ -414,18 +491,47 @@ function EquipmentForm({
             </Col>
           </Row>
         )}
+        <Form.Item name="folder_mode" label="폴더 구조">
+          <Radio.Group
+            optionType="button"
+            options={[
+              { value: 'flat', label: '경로에 파일이 바로 있음' },
+              { value: 'date', label: '경로 아래 날짜별 폴더' },
+            ]}
+          />
+        </Form.Item>
+        {folderMode === 'date' && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message="상위 폴더만 지정하면 그 아래 날짜 폴더를 자동으로 찾아요"
+            description={
+              <span>
+                <code>20261124</code> <code>2026-11-24</code> <code>2026_11_24</code> <code>261124</code> <code>2026\11\24</code> <code>2026-11\24</code> 형식을 모두 인식하고(최대 3단계),
+                오늘부터 <b>조회 일수</b> 전까지의 날짜 폴더만 확인합니다.
+              </span>
+            }
+          />
+        )}
         <Form.Item
           name="log_path"
-          label="로그 저장 경로 (폴더)"
+          label={folderMode === 'date' ? '로그 상위 폴더 (날짜 폴더들이 있는 곳)' : '로그 저장 경로 (폴더)'}
           rules={[{ required: true }]}
           extra={
-            <span>
-              치환자: <code>{'{ip}'}</code> <code>{'{name}'}</code> <code>{'{process}'}</code> <code>{'{date:%Y%m%d}'}</code> · 예){' '}
-              <code>{'\\\\{ip}\\Log\\{date:%Y%m%d}'}</code> , <code>{'/data/log/{date:%Y-%m}'}</code> · FS 방식은 * ** 와일드카드 가능
-            </span>
+            folderMode === 'date' ? (
+              <span>
+                예) <code>{'\\\\{ip}\\Log'}</code> → <code>{'\\\\10.10.1.11\\Log\\20261124\\*.csv'}</code> 를 찾음 · 치환자 <code>{'{ip}'}</code> <code>{'{name}'}</code> <code>{'{process}'}</code> 사용 가능
+              </span>
+            ) : (
+              <span>
+                치환자: <code>{'{ip}'}</code> <code>{'{name}'}</code> <code>{'{process}'}</code> <code>{'{date:%Y%m%d}'}</code> · 예){' '}
+                <code>{'\\\\{ip}\\Log'}</code> , <code>{'\\\\{ip}\\Log\\{date:%Y%m%d}'}</code> · FS 방식은 * ** 와일드카드 가능
+              </span>
+            )
           }
         >
-          <Input className="mono" />
+          <Input className="mono" placeholder={folderMode === 'date' ? '\\\\{ip}\\Log' : undefined} />
         </Form.Item>
         <Row gutter={12}>
           <Col span={10}>
@@ -555,7 +661,7 @@ function EquipmentForm({
   );
 }
 
-function EquipmentDetail({ eq, onClose, onChanged }: { eq: Equipment; onClose: () => void; onChanged: () => void }) {
+function EquipmentDetail({ eq, onClose, onChanged, onDelete }: { eq: Equipment; onClose: () => void; onChanged: () => void; onDelete: () => void }) {
   const { message } = App.useApp();
   const [records, setRecords] = useState<FramePayload | null>(null);
   const [files, setFiles] = useState<any[]>([]);
@@ -585,13 +691,17 @@ function EquipmentDetail({ eq, onClose, onChanged }: { eq: Equipment; onClose: (
               onChanged();
             }}
           >
-            <Button danger>데이터 초기화</Button>
+            <Button>데이터 초기화</Button>
           </Popconfirm>
+          <Button danger icon={<DeleteOutlined />} onClick={onDelete}>
+            설비 삭제
+          </Button>
         </Space>
       }
     >
       <Descriptions size="small" column={4} bordered style={{ marginBottom: 12 }}>
         <Descriptions.Item label="공장">{eq.factory}</Descriptions.Item>
+        <Descriptions.Item label="고객사">{eq.customer}</Descriptions.Item>
         <Descriptions.Item label="제품">{eq.product}</Descriptions.Item>
         <Descriptions.Item label="과제">{eq.project}</Descriptions.Item>
         <Descriptions.Item label="공정">{eq.process}</Descriptions.Item>
@@ -599,7 +709,9 @@ function EquipmentDetail({ eq, onClose, onChanged }: { eq: Equipment; onClose: (
         <Descriptions.Item label="Parser">{eq.parser_name}</Descriptions.Item>
         <Descriptions.Item label="경로" span={2}>
           <span className="mono">
-            {eq.log_path} / {eq.file_pattern}
+            {eq.log_path}
+            {eq.folder_mode === 'date' ? ' / (날짜 폴더) / ' : ' / '}
+            {eq.file_pattern}
           </span>
         </Descriptions.Item>
       </Descriptions>

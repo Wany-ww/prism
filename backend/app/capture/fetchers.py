@@ -3,8 +3,11 @@
 경로 템플릿 예)
   log_path     = \\\\{ip}\\Log\\{date:%Y%m%d}          (날짜 폴더)
   file_pattern = Result_{date:%Y-%m-%d}*.csv          (날짜 포함 파일명)
-사용 가능한 치환자: {ip} {name} {factory} {product} {project} {process} {date:<strftime>}
+사용 가능한 치환자: {ip} {name} {factory} {customer} {product} {project} {process} {date:<strftime>}
 FS 방식은 디렉터리/파일명 모두 glob(*, ?, **) 사용 가능.
+
+folder_mode = "date" 이면 log_path 를 상위 폴더로 보고 그 아래(최대 3단계) 날짜 폴더를 자동으로 찾는다.
+  \\\\ip\\Log\\20261124, \\\\ip\\Log\\2026-11-24, \\\\ip\\Log\\261124, \\\\ip\\Log\\2026\\11\\24, \\\\ip\\Log\\2026-11\\24 …
 """
 
 import fnmatch
@@ -12,6 +15,7 @@ import ftplib
 import glob
 import os
 import posixpath
+import re
 import stat
 import tempfile
 from contextlib import contextmanager
@@ -35,6 +39,7 @@ def template_vars(eq) -> dict:
         "ip": eq.ip or "",
         "name": eq.name or "",
         "factory": eq.factory or "",
+        "customer": getattr(eq, "customer", "") or "",
         "product": eq.product or "",
         "project": eq.project or "",
         "process": eq.process or "",
@@ -61,9 +66,64 @@ def candidate_locations(eq, today: datetime | None = None) -> list[tuple[str, st
     return out
 
 
+DATE_FOLDER_DEPTH = 3
+
+
+def day_keys(eq, today: datetime | None = None) -> dict[str, datetime]:
+    """조회 일수 안의 날짜를 폴더명 숫자열(YYYYMMDD, YYMMDD) → 날짜 로 매핑."""
+    today = today or datetime.now()
+    keys: dict[str, datetime] = {}
+    for i in range(max(int(eq.lookback_days or 0), 0) + 1):
+        d = today - timedelta(days=i)
+        keys.setdefault(d.strftime("%Y%m%d"), d)
+        keys.setdefault(d.strftime("%y%m%d"), d)
+    return keys
+
+
+def find_date_folders(list_dirs, join, base: str, keys: dict[str, datetime], depth: int = DATE_FOLDER_DEPTH) -> list[tuple[str, datetime]]:
+    """base 아래에서 경로상의 숫자를 이어 붙인 값이 날짜가 되는 폴더를 찾는다 (예: 2026/11/24 → 20261124).
+    날짜가 될 수 없는 폴더는 내려가지 않으므로 큰 공유 폴더에서도 탐색량이 작다."""
+    found: list[tuple[str, datetime]] = []
+
+    def walk(path: str, digits: str, level: int):
+        if level >= depth:
+            return
+        for name in sorted(list_dirs(path)):
+            d = digits + re.sub(r"\D", "", name)
+            if d == digits:
+                continue
+            child = join(path, name)
+            if d in keys:
+                found.append((child, keys[d]))
+            elif any(k.startswith(d) for k in keys):
+                walk(child, d, level + 1)
+
+    walk(base, "", 0)
+    return found
+
+
+def resolve_locations(fetcher, eq) -> list[tuple[str, str]]:
+    """설비 설정으로 실제 조회할 (폴더, 파일패턴) 목록."""
+    if (getattr(eq, "folder_mode", "flat") or "flat") != "date":
+        return candidate_locations(eq)
+    today = datetime.now()
+    base = render(eq.log_path or "", eq, today)
+    folders = find_date_folders(fetcher.list_dirs, fetcher.join, base, day_keys(eq, today))
+    return [(path, render(eq.file_pattern or "*", eq, day)) for path, day in sorted(folders, key=lambda x: x[1])]
+
+
 class FsFetcher:
+    join = staticmethod(os.path.join)
+
     def __init__(self, eq):
         self.eq = eq
+
+    def list_dirs(self, directory: str) -> list[str]:
+        try:
+            with os.scandir(directory) as it:
+                return [e.name for e in it if e.is_dir()]
+        except OSError:
+            return []
 
     def list(self, directory: str, pattern: str) -> list[RemoteFile]:
         out = []
@@ -102,6 +162,29 @@ class FtpFetcher:
                 self.ftp.set_pasv(False)
         except (OSError, ftplib.Error) as e:
             raise CaptureError(f"FTP 접속 실패 {eq.ip}: {e}") from e
+
+    join = staticmethod(posixpath.join)
+
+    def list_dirs(self, directory: str) -> list[str]:
+        try:
+            return [n for n, f in self.ftp.mlsd(directory, facts=["type"]) if f.get("type") == "dir"]
+        except ftplib.error_perm:
+            pass
+        # MLSD 미지원 서버: 각 항목에 CWD 가 되는지로 폴더 판별
+        try:
+            names = [posixpath.basename(n) for n in self.ftp.nlst(directory)]
+        except ftplib.error_perm:
+            return []
+        cur, out = self.ftp.pwd(), []
+        for n in names:
+            try:
+                self.ftp.cwd(posixpath.join(directory, n))
+                out.append(n)
+            except ftplib.error_perm:
+                pass
+            finally:
+                self.ftp.cwd(cur)
+        return out
 
     def list(self, directory: str, pattern: str) -> list[RemoteFile]:
         out = []
@@ -162,6 +245,14 @@ class SftpFetcher:
         except Exception as e:
             raise CaptureError(f"SFTP 접속 실패 {eq.ip}: {e}") from e
 
+    join = staticmethod(posixpath.join)
+
+    def list_dirs(self, directory: str) -> list[str]:
+        try:
+            return [a.filename for a in self.sftp.listdir_attr(directory) if stat.S_ISDIR(a.st_mode or 0)]
+        except OSError:
+            return []
+
     def list(self, directory: str, pattern: str) -> list[RemoteFile]:
         try:
             entries = self.sftp.listdir_attr(directory)
@@ -203,7 +294,7 @@ def open_fetcher(eq):
 
 def discover(fetcher, eq) -> list[RemoteFile]:
     files: dict[str, RemoteFile] = {}
-    for directory, pattern in candidate_locations(eq):
+    for directory, pattern in resolve_locations(fetcher, eq):
         for rf in fetcher.list(directory, pattern):
             files[rf.path] = rf
     return sorted(files.values(), key=lambda r: (r.mtime, r.path))

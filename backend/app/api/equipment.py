@@ -1,3 +1,4 @@
+import copy
 import os
 from datetime import datetime
 from types import SimpleNamespace
@@ -8,11 +9,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from ..capture.fetchers import CaptureError, candidate_locations, discover, open_fetcher
+from ..capture.fetchers import CaptureError, candidate_locations, discover, open_fetcher, resolve_locations
 from ..capture.service import is_running, run_capture
 from ..db import get_db
 from ..engine.frames import frame_payload
-from ..models import CapturedFile, CaptureRun, Equipment, Record
+from ..models import CapturedFile, CaptureRun, Equipment, Flow, Record
 from ..scheduler import scheduler
 from .common import get_or_404, row_dict
 
@@ -23,6 +24,7 @@ MASK = "********"
 class EquipmentIn(BaseModel):
     name: str
     factory: str = ""
+    customer: str = ""
     product: str = ""
     project: str = ""
     process: str = ""
@@ -32,6 +34,7 @@ class EquipmentIn(BaseModel):
     username: str = ""
     password: str = ""
     log_path: str = ""
+    folder_mode: str = "flat"
     file_pattern: str = "*.csv"
     lookback_days: int = 1
     encoding: str = "utf-8"
@@ -76,7 +79,7 @@ def list_equipment(db: Session = Depends(get_db)):
 @router.get("/suggestions")
 def suggestions(db: Session = Depends(get_db)):
     out = {}
-    for f in ("factory", "product", "project", "process"):
+    for f in ("factory", "customer", "product", "project", "process"):
         col = getattr(Equipment, f)
         out[f] = [v for v in db.scalars(select(col).distinct().order_by(col)) if v]
     return out
@@ -113,9 +116,67 @@ def update_equipment(eq_id: int, body: EquipmentIn, db: Session = Depends(get_db
 
 @router.delete("/{eq_id}")
 def delete_equipment(eq_id: int, db: Session = Depends(get_db)):
-    db.delete(get_or_404(db, Equipment, eq_id))
+    return _delete(db, [eq_id])
+
+
+class DeleteIn(BaseModel):
+    ids: list[int]
+
+
+@router.post("/delete")
+def delete_many(body: DeleteIn, db: Session = Depends(get_db)):
+    return _delete(db, body.ids)
+
+
+def _flows_using(db, ids: set[int]) -> list[Flow]:
+    out = []
+    for f in db.scalars(select(Flow)):
+        for n in (f.graph or {}).get("nodes", []):
+            d = n.get("data") or {}
+            if d.get("kind") == "source" and ids & {int(i) for i in (d.get("params") or {}).get("equipment_ids") or []}:
+                out.append(f)
+                break
+    return out
+
+
+@router.get("/{eq_id}/usage")
+def usage(eq_id: int, db: Session = Depends(get_db)):
+    """삭제 전 확인용: 수집 데이터 양과 이 설비를 쓰는 Flow."""
+    get_or_404(db, Equipment, eq_id)
+    files, rows = db.execute(
+        select(func.count(), func.coalesce(func.sum(CapturedFile.rows), 0)).where(CapturedFile.equipment_id == eq_id)
+    ).one()
+    return {
+        "files": files,
+        "records": int(rows),
+        "flows": [{"id": f.id, "name": f.name, "kind": f.kind} for f in _flows_using(db, {eq_id})],
+    }
+
+
+def _delete(db, ids: list[int]) -> dict:
+    """설비 삭제: 수집 파일·레코드·수집 이력은 함께 삭제되고, Flow 의 설비 데이터 노드에서는 선택이 해제된다."""
+    eqs = db.scalars(select(Equipment).where(Equipment.id.in_(ids))).all()
+    if not eqs:
+        raise HTTPException(404, "설비 없음")
+    if any(is_running(e.id) for e in eqs):
+        raise HTTPException(409, "수집 중인 설비가 있습니다. 잠시 후 다시 시도하세요.")
+    gone = {e.id for e in eqs}
+    # SQLite 는 대량 cascade 가 느리므로 레코드부터 명시적으로 삭제
+    db.execute(delete(Record).where(Record.equipment_id.in_(gone)))
+    db.execute(delete(CapturedFile).where(CapturedFile.equipment_id.in_(gone)))
+    db.execute(delete(CaptureRun).where(CaptureRun.equipment_id.in_(gone)))
+    flows = _flows_using(db, gone)
+    for f in flows:
+        graph = copy.deepcopy(f.graph)
+        for n in graph.get("nodes", []):
+            p = (n.get("data") or {}).get("params") or {}
+            if n.get("data", {}).get("kind") == "source":
+                p["equipment_ids"] = [i for i in p.get("equipment_ids") or [] if int(i) not in gone]
+        f.graph = graph
+    for e in eqs:
+        db.delete(e)
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "deleted": sorted(gone), "flows_updated": [f.name for f in flows]}
 
 
 @router.post("/{eq_id}/capture")
@@ -149,11 +210,21 @@ def probe(body: ProbeIn, db: Session = Depends(get_db)):
     if body.id and body.password == MASK:
         cfg.password = get_or_404(db, Equipment, body.id).password
     try:
-        locations = [{"dir": d, "pattern": p} for d, p in candidate_locations(cfg)]
         if cfg.access_method == "agent":
-            return {"ok": True, "locations": locations, "files": [], "message": "Agent 방식: 게이트웨이 PC 기준 경로입니다."}
+            locations = [{"dir": d, "pattern": p} for d, p in candidate_locations(cfg)]
+            msg = "Agent 방식: 게이트웨이 PC 기준 경로입니다."
+            if cfg.folder_mode == "date":
+                msg += " 날짜 폴더는 에이전트가 게이트웨이 PC 에서 찾습니다."
+            return {"ok": True, "locations": locations[-1:] if cfg.folder_mode == "date" else locations, "files": [], "message": msg}
         with open_fetcher(cfg) as f:
+            locations = [{"dir": d, "pattern": p} for d, p in resolve_locations(f, cfg)]
             files = discover(f, cfg)
+        if cfg.folder_mode == "date" and not locations:
+            return {
+                "ok": False,
+                "error": f"'{cfg.log_path}' 아래에서 최근 {cfg.lookback_days + 1}일 날짜 폴더를 찾지 못했습니다. 상위 폴더 경로와 조회 일수를 확인하세요.",
+                "locations": [],
+            }
     except CaptureError as e:
         return {"ok": False, "error": str(e), "locations": []}
     except Exception as e:

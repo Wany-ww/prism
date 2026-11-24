@@ -13,6 +13,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 import time
 import urllib.parse
@@ -45,13 +46,39 @@ def upload(server, token, equipment, path, st):
     )
 
 
+def date_folder_locations(spec):
+    """서버와 같은 규칙: 상위 폴더 아래 경로 숫자를 이어 붙인 값이 날짜(YYYYMMDD/YYMMDD)인 폴더."""
+    keys, out = spec["keys"], []
+
+    def walk(path, digits, level):
+        if level >= spec.get("depth", 3):
+            return
+        try:
+            names = sorted(e.name for e in os.scandir(path) if e.is_dir())
+        except OSError:
+            return
+        for name in names:
+            d = digits + re.sub(r"\D", "", name)
+            if d == digits:
+                continue
+            child = os.path.join(path, name)
+            if d in keys:
+                out.append({"dir": child, "pattern": keys[d]})
+            elif any(k.startswith(d) for k in keys):
+                walk(child, d, level + 1)
+
+    walk(spec["base"], "", 0)
+    return out
+
+
 def sync(server, token, equipment, log):
     cfg = http_json(f"{server}/api/agent/config?" + urllib.parse.urlencode({"equipment": equipment}), token)
     if not cfg.get("enabled", True):
         return cfg.get("interval_sec", 300)
     known = cfg.get("known", {})
     files = {}
-    for loc in cfg["locations"]:
+    locations = cfg["locations"] + (date_folder_locations(cfg["date_folders"]) if cfg.get("date_folders") else [])
+    for loc in locations:
         for p in glob.glob(os.path.join(loc["dir"], loc["pattern"]), recursive=True):
             if os.path.isfile(p):
                 files[os.path.normpath(p)] = os.stat(p)

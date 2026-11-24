@@ -9,7 +9,7 @@ from . import models  # noqa: F401  (테이블 등록)
 from .api import agent, data, equipment, flows, parsers
 from .api import graph as graph_api
 from .config import FRONTEND_DIST, SCHEDULER_ENABLED, SEED_DEMO
-from .db import Base, engine
+from .db import Base, engine, ensure_columns
 from .scheduler import scheduler
 from .seed import seed_all
 
@@ -19,6 +19,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
+    ensure_columns()
     seed_all(SEED_DEMO)
     if SCHEDULER_ENABLED:
         scheduler.start()

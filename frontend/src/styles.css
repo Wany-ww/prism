@@ -595,6 +595,15 @@ code {
 .ant-table-wrapper .ant-table-thead > tr > th::before {
   display: none;
 }
+/* 헤더 배경이 투명이라 가로 스크롤 시 고정 열 뒤로 다른 열 제목이 비치지 않도록 */
+.ant-table-wrapper .ant-table-thead > tr > th.ant-table-cell-fix-left,
+.ant-table-wrapper .ant-table-thead > tr > th.ant-table-cell-fix-right {
+  background: var(--bg);
+}
+.content.sub .ant-table-wrapper .ant-table-thead > tr > th.ant-table-cell-fix-left,
+.content.sub .ant-table-wrapper .ant-table-thead > tr > th.ant-table-cell-fix-right {
+  background: var(--panel);
+}
 .ant-card {
   border: none;
   border-radius: 16px;

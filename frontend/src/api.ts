@@ -31,11 +31,13 @@ export type Equipment = {
   id: number;
   name: string;
   factory: string;
+  customer: string;
   product: string;
   project: string;
   process: string;
   ip: string;
   access_method: 'fs' | 'ftp' | 'sftp' | 'agent';
+  folder_mode: 'flat' | 'date';
   port: number | null;
   username: string;
   password: string;

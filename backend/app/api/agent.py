@@ -7,12 +7,13 @@
 import os
 import shutil
 import tempfile
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..capture.fetchers import candidate_locations
+from ..capture.fetchers import DATE_FOLDER_DEPTH, candidate_locations, day_keys, render
 from ..capture.service import ingest_uploaded, parser_hash
 from ..config import AGENT_TOKEN, STAGING_DIR
 from ..db import get_db
@@ -41,7 +42,7 @@ def agent_config(equipment: str, x_agent_token: str | None = Header(None), db: S
         cf.path: [cf.size, cf.mtime, cf.parser_hash]
         for cf in db.scalars(select(CapturedFile).where(CapturedFile.equipment_id == eq.id))
     }
-    return {
+    out = {
         "id": eq.id,
         "name": eq.name,
         "enabled": eq.enabled,
@@ -50,6 +51,16 @@ def agent_config(equipment: str, x_agent_token: str | None = Header(None), db: S
         "locations": [{"dir": d, "pattern": p} for d, p in candidate_locations(eq)],
         "known": known,
     }
+    if eq.folder_mode == "date":
+        # 에이전트가 게이트웨이 PC 에서 날짜 폴더를 찾도록: 폴더 숫자열 → 그 날짜의 파일 패턴
+        now = datetime.now()
+        out["locations"] = []
+        out["date_folders"] = {
+            "base": render(eq.log_path or "", eq, now),
+            "depth": DATE_FOLDER_DEPTH,
+            "keys": {k: render(eq.file_pattern or "*", eq, d) for k, d in day_keys(eq, now).items()},
+        }
+    return out
 
 
 @router.post("/upload")
