@@ -9,6 +9,17 @@ Capture ──▶ Match ──▶ Analysis ──▶ Present
 
 설비 추가, Parser, 매칭 규칙, 분석 노드, 대시보드 배치를 모두 **웹 화면에서** 바꿀 수 있어 코드 수정 없이 운영하는 것을 목표로 합니다.
 
+![대시보드 — 핀 위치와 Area 상관성](docs/screenshots/dashboard.png)
+
+<details>
+<summary>홈 화면 · 다크 모드 보기</summary>
+
+![홈 — 설비별 수집 현황과 실시간 수집 이력](docs/screenshots/home.png)
+
+![대시보드 다크 모드](docs/screenshots/dashboard-dark.png)
+
+</details>
+
 ## 빠른 시작
 
 필요: Python 3.11+, Node.js 18+ (Windows 기준)
@@ -70,6 +81,10 @@ def parse(path, ctx):
 
 `pd`, `np`, `re`, `json`, `math`, `datetime` 은 import 없이 쓸 수 있습니다.
 
+![설비 관리](docs/screenshots/equipment.png)
+
+![Parser 편집 — 코드 작성과 저장 전 테스트](docs/screenshots/parser.png)
+
 ### 2. Match — 매칭
 
 n8n 형태의 노드 편집기에서 설비를 연결해 같은 제품의 공정 이력을 한 행으로 모읍니다.
@@ -85,7 +100,11 @@ n8n 형태의 노드 편집기에서 설비를 연결해 같은 제품의 공정
 
   키 정규화(공백 제거, `1.0` → `1`), 대소문자 무시, 최대 시간 차를 설정할 수 있습니다.
 - **출력** 노드: 결과를 데이터셋으로 저장합니다. 노드를 선택하고 **여기까지 실행**을 누르면 중간 결과를 바로 확인할 수 있습니다.
-- **제품 Trace 조회**: VAID · QR · Tray No 로 검색하면 공정별 이력을 순서대로 보여줍니다.
+- **제품 Trace 조회**: VAID · QR · Tray No 로 검색하면 공정별 이력을 순서대로 보여줍니다. `/trace?q=<제품키>` 링크로 바로 조회할 수도 있습니다.
+
+![Match Flow — Blade 조립 → 구동 검사 → EOL 연결](docs/screenshots/match-flow.png)
+
+![제품 Trace — 한 제품의 공정별 이력](docs/screenshots/trace.png)
 
 ### 3. Analysis — 분석
 
@@ -100,6 +119,8 @@ def run(inputs, params):
 파라미터 타입: `string` `text` `number` `boolean` `select` `column` `columns` `json` (`column`/`columns` 는 입력 데이터의 컬럼 목록을 선택지로 보여줍니다)
 
 Flow는 수동 실행 외에 1분 ~ 1일 주기로 자동 실행할 수 있습니다.
+
+![Analysis Flow — 상관 행렬 · 회귀 · 시간별 추이](docs/screenshots/analysis-flow.png)
 
 ### 4. Present — 대시보드
 
