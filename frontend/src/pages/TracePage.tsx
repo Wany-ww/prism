@@ -1,6 +1,7 @@
 import { Alert, Button, Empty, Input, Select, Space, Typography } from 'antd';
 import { RightOutlined, SearchOutlined } from '@ant-design/icons';
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api, Dataset, FramePayload } from '../api';
 import { fmtCell } from '../components/DataGrid';
 import StageHeader from '../components/StageHeader';
@@ -32,28 +33,37 @@ export default function TracePage() {
   const [sel, setSel] = useState(0);
   const [err, setErr] = useState('');
 
+  const [sp] = useSearchParams();
+
   useEffect(() => {
     api.get<Dataset[]>('/api/datasets').then((l) => {
       setDatasets(l);
-      const best = l.find((d) => d.name === 'product_trace') ?? l.find((d) => d.columns.some((c) => c.name.includes('.')));
-      setDs(best?.name ?? l[0]?.name);
+      const best = l.find((d) => d.name === sp.get('dataset')) ?? l.find((d) => d.name === 'product_trace') ?? l.find((d) => d.columns.some((c) => c.name.includes('.')));
+      const name = best?.name ?? l[0]?.name;
+      setDs(name);
+      // /trace?q=<제품키> 링크로 바로 조회
+      const linked = sp.get('q');
+      if (linked && name) {
+        setQ(linked);
+        search(name, linked);
+      }
     });
   }, []);
 
   const cols = useMemo(() => datasets.find((d) => d.name === ds)?.columns.map((c) => c.name) ?? [], [datasets, ds]);
   const keyCols = cols.filter((c) => /vaid|qr|serial|tray no|lot|id$/i.test(c)).slice(0, 6);
 
-  const search = async () => {
-    if (!ds || !q.trim()) return;
+  async function search(dsName = ds, query = q) {
+    if (!dsName || !query.trim()) return;
     setErr('');
     try {
-      const params = new URLSearchParams({ dataset: ds, q, mode, limit: '50', ...(column ? { column } : {}) });
+      const params = new URLSearchParams({ dataset: dsName, q: query, mode, limit: '50', ...(column ? { column } : {}) });
       setRes(await api.get(`/api/trace/search?${params}`));
       setSel(0);
     } catch (e: any) {
       setErr(e.message);
     }
-  };
+  }
 
   const groups = res && res.rows[sel] ? groupRow(res, res.rows[sel]) : [];
 
@@ -66,10 +76,10 @@ export default function TracePage() {
           placeholder="VAID · QR · Tray No 로 제품을 찾아보세요"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          onPressEnter={search}
+          onPressEnter={() => search()}
           prefix={<SearchOutlined className="muted" />}
           suffix={
-            <Button type="primary" onClick={search}>
+            <Button type="primary" onClick={() => search()}>
               조회
             </Button>
           }

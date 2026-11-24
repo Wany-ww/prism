@@ -246,8 +246,8 @@ function histogram(cfg: ChartConfig, d: FramePayload) {
     ...b,
     tooltip: { ...b.tooltip, trigger: 'axis', axisPointer: { type: 'shadow' } },
     xAxis: { type: 'category', data: labels, name: cfg.x, nameLocation: 'middle', nameGap: 24, ...axisCommon(), splitLine: { show: false } },
-    yAxis: { type: 'value', name: '개수', ...axisCommon() },
-    grid: { ...b.grid, bottom: 26 },
+    yAxis: { type: 'value', name: '개수', nameLocation: 'middle', nameGap: 30, ...axisCommon() },
+    grid: { ...b.grid, left: 22, bottom: 26 },
     series: out,
   };
 }
