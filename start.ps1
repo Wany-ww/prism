@@ -1,4 +1,4 @@
-# PRISM 실행 스크립트 (Windows PowerShell)
+﻿# PRISM 실행 스크립트 (Windows PowerShell)
 #   .\start.ps1           : 최초 실행 시 의존성 설치 + 프론트 빌드 후 http://<서버>:8000 으로 서비스
 #   .\start.ps1 -Rebuild  : 프론트엔드 다시 빌드
 param([switch]$Rebuild, [int]$Port = 8000)
