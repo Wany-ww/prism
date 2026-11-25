@@ -1,14 +1,17 @@
-import { Button, Empty, Input, Space, Spin, Tag, Tooltip, Typography } from 'antd';
-import { AimOutlined, DeleteOutlined, EditOutlined, FilterOutlined, SearchOutlined } from '@ant-design/icons';
+import { Button, Empty, Input, Select, Slider, Space, Spin, Tag, Tooltip, Typography } from 'antd';
+import { AimOutlined, DeleteOutlined, EditOutlined, FilterOutlined, SearchOutlined, SlidersOutlined } from '@ant-design/icons';
 import ReactECharts from 'echarts-for-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, Dataset, FramePayload } from '../api';
 import DataGrid from '../components/DataGrid';
 import { useTheme } from '../theme';
 import { buildOption, ChartConfig, neededColumns } from './charts';
-import { DS_COL, Layer, layerLabels, LinkCfg, mergeFrames, normKey, renameColumns, resolveLinkColumn, SEL_COL, Selection } from './link';
+import { DS_COL, Layer, layerLabels, LinkCfg, mergeFrames, normKey, paramIdOf, Params, renameColumns, resolveLinkColumn, resolveParam, SEL_COL, Selection } from './link';
 
-export type WidgetType = 'chart' | 'table' | 'stat' | 'text';
+export type WidgetType = 'chart' | 'table' | 'stat' | 'text' | 'control';
+export type ControlKind = 'dropdown' | 'slider';
+/** 컨트롤 위젯의 한 항목: 고를 때 보여줄 이름과, 그걸 고르면 파라미터에 들어갈 실제 값(보통 컬럼명) */
+export type ControlOption = { label: string; value: string };
 export type StatAgg = 'count' | 'distinct' | 'mean' | 'sum' | 'min' | 'max' | 'last';
 export type Widget = {
   i: string;
@@ -32,11 +35,52 @@ export type Widget = {
   select?: { column?: string };
   /** 다른 위젯의 선택에 반응하는 방식 */
   link?: LinkCfg;
+  /** 드롭다운/슬라이더: paramId 파라미터를 options 중 고른 값(컬럼명)으로 바꿈 */
+  control?: { kind?: ControlKind; paramId?: string; options?: ControlOption[] };
 };
 
 /** 강조 표시를 지원하는 차트 (나머지는 필터) */
 export const canHighlight = (w: Widget) => w.type === 'chart' && (w.chart?.kind === 'scatter' || w.chart?.kind === 'xy');
 export const linkBehavior = (w: Widget) => (canHighlight(w) ? w.link?.behavior ?? 'highlight' : 'filter');
+
+/**
+ * 차트/표/통계 설정 안의 `$파라미터` 토큰(paramToken 으로 넣음)을 컨트롤 위젯이 정한
+ * 실제 컬럼명으로 바꾼 위젯 사본을 만든다. 파라미터 값이 아직 없으면 그 필드는 빈 채로 둔다.
+ * 편집 화면은 항상 원래(토큰이 있는) 위젯을 쓰고, 데이터를 읽고 그리는 쪽만 이 결과를 쓴다.
+ */
+export function resolveWidgetParams(w: Widget, params: Params): Widget {
+  if (w.type === 'chart' && w.chart) {
+    const c = w.chart;
+    return {
+      ...w,
+      chart: {
+        ...c,
+        x: resolveParam(c.x, params),
+        y: (c.y ?? []).map((y) => resolveParam(y, params)).filter(Boolean) as string[],
+        series: resolveParam(c.series, params),
+        tip: resolveParam(c.tip, params),
+        z: resolveParam(c.z, params),
+      },
+    };
+  }
+  if (w.type === 'table') {
+    return {
+      ...w,
+      table: w.table?.columns?.length ? { ...w.table, columns: w.table.columns.map((c) => resolveParam(c, params)).filter(Boolean) as string[] } : w.table,
+      select: w.select?.column ? { column: resolveParam(w.select.column, params) } : w.select,
+    };
+  }
+  if (w.type === 'stat' && w.stat?.column) {
+    return { ...w, stat: { ...w.stat, column: resolveParam(w.stat.column, params) } };
+  }
+  return w;
+}
+
+/** 위젯이 쓰는 파라미터 id 목록 (대시보드 안에서 어떤 파라미터가 쓰이는지 모을 때) */
+export function widgetParamIds(w: Widget): string[] {
+  const vals = [w.chart?.x, ...(w.chart?.y ?? []), w.chart?.series, w.chart?.tip, w.chart?.z, w.stat?.column, w.select?.column, ...(w.table?.columns ?? [])];
+  return [...new Set(vals.map(paramIdOf).filter((x): x is string => x !== null))];
+}
 
 function useSize<T extends HTMLElement>() {
   const ref = useRef<T>(null);
@@ -78,12 +122,14 @@ export function widgetSources(w: Widget): Source[] {
 type Req = Source & { url: string; linkCol: string | null; highlight: boolean };
 
 export default function WidgetView({
-  w,
+  w: wRaw,
   tick,
   editing,
   datasets,
   selection,
   onSelect,
+  params,
+  onParamChange,
   onEdit,
   onDelete,
 }: {
@@ -93,6 +139,8 @@ export default function WidgetView({
   datasets: Dataset[];
   selection: Selection | null;
   onSelect: (s: Selection | null) => void;
+  params: Params;
+  onParamChange: (paramId: string, value: string) => void;
   onEdit?: () => void;
   onDelete?: () => void;
 }) {
@@ -101,13 +149,15 @@ export default function WidgetView({
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState('');
   const [bodyRef, size] = useSize<HTMLDivElement>();
+  // 파라미터 토큰($metric 등)을 현재 컨트롤 값으로 바꾼 위젯. 편집은 항상 wRaw(토큰 그대로)를 쓴다.
+  const w = useMemo(() => resolveWidgetParams(wRaw, params), [wRaw, params]);
   const limit = w.limit ?? (w.type === 'table' ? 5000 : w.type === 'stat' ? 0 : 50000);
   const isSource = !!selection && selection.source === w.i;
   const behavior = linkBehavior(w);
 
   // 데이터셋별 요청 (선택 연동 컬럼은 데이터셋마다 다를 수 있음)
   const reqs: Req[] = useMemo(() => {
-    if (w.type === 'text') return [];
+    if (w.type === 'text' || w.type === 'control') return [];
     const need = neededColumns(w);
     return widgetSources(w).map((s) => {
       const meta = datasets.find((d) => d.name === s.dataset);
@@ -159,7 +209,7 @@ export default function WidgetView({
   }, [reqKey, tick]);
 
   const { mode } = useTheme();
-  const chartSize = w.type === 'chart' && w.chart?.kind === 'xy' ? size : undefined;
+  const chartSize = w.type === 'chart' && (w.chart?.kind === 'xy' || w.chart?.kind === 'histogram') ? size : undefined;
   const option = useMemo(
     () => (w.type === 'chart' && w.chart && data ? buildOption(w.chart, data, mode, chartSize) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -191,9 +241,46 @@ export default function WidgetView({
     return { ...data, rows: data.rows.filter((r) => r.some((v) => v !== null && String(v).toLowerCase().includes(s))) };
   }, [data, q, w.type]);
 
+  // ---- 컨트롤(드롭다운/슬라이더): 고른 항목의 값을 파라미터에 반영 ----
+  const ctrl = w.control;
+  const ctrlOpts = ctrl?.options?.filter((o) => o.value) ?? [];
+  const ctrlVal = ctrl?.paramId ? params[ctrl.paramId] : undefined;
+  const ctrlIdx = Math.max(0, ctrlOpts.findIndex((o) => o.value === ctrlVal));
+
   let body: React.ReactNode = null;
   if (w.type === 'text') {
     body = <Typography.Paragraph style={{ whiteSpace: 'pre-wrap', margin: 4, color: 'var(--text-2)' }}>{w.text?.content}</Typography.Paragraph>;
+  } else if (w.type === 'control') {
+    if (!ctrl?.paramId || !ctrlOpts.length) {
+      body = <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Set a parameter and options" />;
+    } else if (ctrl.kind === 'slider') {
+      body = (
+        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '4px 20px' }}>
+          <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 600, marginBottom: 10 }}>{ctrlOpts[ctrlIdx]?.label}</div>
+          <Slider
+            min={0}
+            max={ctrlOpts.length - 1}
+            step={1}
+            value={ctrlIdx}
+            tooltip={{ formatter: (i) => (i === undefined ? '' : ctrlOpts[i]?.label) }}
+            marks={Object.fromEntries(ctrlOpts.map((_, i) => [i, '']))}
+            onChange={(i) => onParamChange(ctrl.paramId!, ctrlOpts[i as number].value)}
+          />
+        </div>
+      );
+    } else {
+      body = (
+        <div style={{ padding: '10px 16px' }}>
+          <Select
+            style={{ width: '100%' }}
+            value={ctrlVal}
+            placeholder="Select a value"
+            options={ctrlOpts.map((o) => ({ value: o.value, label: o.label }))}
+            onChange={(v) => onParamChange(ctrl.paramId!, v)}
+          />
+        </div>
+      );
+    }
   } else if (!w.dataset) {
     body = <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Choose a dataset" />;
   } else if (err) {
@@ -253,6 +340,13 @@ export default function WidgetView({
       <div className="dash-widget-head drag-handle">
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: w.type === 'stat' ? 13 : undefined, fontWeight: w.type === 'stat' ? 500 : undefined, color: w.type === 'stat' ? 'var(--text-2)' : undefined }}>
           <span className="ellipsis">{w.title}</span>
+          {w.type === 'control' && ctrl?.paramId && (
+            <Tooltip title={`Other widgets bound to '${ctrl.paramId}' follow this`}>
+              <Tag bordered={false} color="purple" icon={<SlidersOutlined />} style={{ margin: 0 }}>
+                {ctrl.paramId}
+              </Tag>
+            </Tooltip>
+          )}
           {linked && (
             <Tooltip title={`${selection!.column} = ${selection!.values.join(', ')} ${behavior === 'filter' ? '· showing only these rows' : '· highlighting these points'}`}>
               <Tag bordered={false} color="blue" icon={behavior === 'filter' ? <FilterOutlined /> : <AimOutlined />} style={{ margin: 0, maxWidth: 180 }} className="ellipsis">

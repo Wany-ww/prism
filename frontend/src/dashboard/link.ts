@@ -16,6 +16,21 @@ export type Layer = { dataset: string; label?: string; map?: Record<string, stri
 export const DS_COL = '_dataset';
 export const SEL_COL = '__sel';
 
+/** 대시보드 파라미터 (컨트롤 위젯이 바꾸는 값): 파라미터 id → 현재 선택된 컬럼명 */
+export type Params = Record<string, string>;
+const PARAM_PREFIX = '$';
+/** 차트/표 설정에 넣는 토큰 형태, 예) paramToken('metric') === '$metric' */
+export const paramToken = (id: string) => PARAM_PREFIX + id;
+/** 값이 `$id` 형태의 파라미터 토큰이면 id 를, 아니면(일반 컬럼명이면) null 을 반환 */
+export function paramIdOf(v: string | undefined): string | null {
+  return v && v.startsWith(PARAM_PREFIX) && v.length > 1 ? v.slice(1) : null;
+}
+/** 파라미터 토큰을 현재 값(실제 컬럼명)으로 바꿈. 파라미터가 아니면 그대로, 아직 값이 없으면 undefined */
+export function resolveParam(v: string | undefined, params: Params): string | undefined {
+  const id = paramIdOf(v);
+  return id === null ? v : params[id] || undefined;
+}
+
 /** 서버(_norm_keys)와 같은 규칙: 앞뒤 공백 제거, 1.0 → 1 */
 export function normKey(v: unknown): string {
   if (v === null || v === undefined) return '';

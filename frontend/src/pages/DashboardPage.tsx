@@ -6,7 +6,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, Dataset } from '../api';
 import WidgetView, { Widget } from '../dashboard/Widget';
 import WidgetEditor from '../dashboard/WidgetEditor';
-import type { Selection } from '../dashboard/link';
+import type { Params, Selection } from '../dashboard/link';
 import { useTrackRecent } from '../recent';
 
 const Grid = WidthProvider(GridLayout);
@@ -26,6 +26,19 @@ export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) 
   const [tick, setTick] = useState(0);
   // 테이블 행 클릭으로 정한 선택 값 — 연동된 위젯들이 이 값 기준으로 바뀜
   const [selection, setSelection] = useState<Selection | null>(null);
+  // 드롭다운/슬라이더 컨트롤 위젯이 정한 값 — paramId → 현재 컬럼명. 새 컨트롤 위젯은 첫 항목으로 시작
+  const [params, setParams] = useState<Params>({});
+  useEffect(() => {
+    setParams((cur) => {
+      let next: Params | null = null;
+      for (const w of widgets) {
+        const id = w.control?.paramId;
+        const first = w.control?.options?.[0]?.value;
+        if (w.type === 'control' && id && first && !(cur[id] ?? next?.[id])) next = { ...(next ?? cur), [id]: first };
+      }
+      return next ?? cur;
+    });
+  }, [widgets]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !editW && setSelection(null);
@@ -159,6 +172,8 @@ export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) 
                 datasets={datasets}
                 selection={selection}
                 onSelect={setSelection}
+                params={params}
+                onParamChange={(id, v) => setParams((p) => ({ ...p, [id]: v }))}
                 onEdit={() => setEditW(w)}
                 onDelete={() => {
                   setWidgets((ws) => ws.filter((x) => x.i !== w.i));
@@ -174,6 +189,7 @@ export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) 
         <WidgetEditor
           value={editW}
           datasets={datasets}
+          paramIds={[...new Set(widgets.filter((x) => x.type === 'control' && x.control?.paramId).map((x) => x.control!.paramId!))]}
           onCancel={() => setEditW(null)}
           onOk={(nw) => {
             setWidgets((ws) => (ws.some((x) => x.i === nw.i) ? ws.map((x) => (x.i === nw.i ? nw : x)) : [...ws, nw]));

@@ -1,3 +1,4 @@
+import 'echarts-gl'; // 사이드이펙트: echarts 인스턴스에 3D(grid3D/scatter3D) 컴포넌트를 등록
 import type { FramePayload } from '../api';
 import type { Mode } from '../theme';
 import { DS_COL, SEL_COL } from './link';
@@ -18,19 +19,21 @@ const THEMES = {
 };
 let T = THEMES.light;
 
-export type ChartKind = 'line' | 'area' | 'bar' | 'scatter' | 'xy' | 'histogram' | 'heatmap' | 'box' | 'pie';
+export type ChartKind = 'line' | 'area' | 'bar' | 'scatter' | 'xy' | 'histogram' | 'heatmap' | 'box' | 'pie' | 'scatter3d';
 export type SpecShape = 'none' | 'circle' | 'rect';
 export type ChartConfig = {
   kind: ChartKind;
   x?: string;
   y?: string[];
+  /** 3D 산점도: 세 번째 축 컬럼 */
+  z?: string;
   series?: string;
   agg?: 'none' | 'mean' | 'sum' | 'count' | 'min' | 'max';
   bins?: number;
   trendline?: boolean;
   stack?: boolean;
   sort?: 'none' | 'asc' | 'desc';
-  /** 산점도·좌표 분포: 툴팁에 함께 보여줄 컬럼 (예: VAID) */
+  /** 산점도·좌표 분포·3D: 툴팁에 함께 보여줄 컬럼 (예: VAID) */
   tip?: string;
   /** 좌표 분포: X/Y 축 눈금 1:1 */
   equal?: boolean;
@@ -38,6 +41,8 @@ export type ChartConfig = {
   centroid?: boolean;
   /** 좌표 분포: 기준 위치와 허용 범위 */
   spec?: { shape?: SpecShape; cx?: number | null; cy?: number | null; r?: number | null; dx?: number | null; dy?: number | null };
+  /** 히스토그램: 공정능력(Cp/Cpk) 계산에 쓰는 규격 하한(LSL)/상한(USL). 하나만 넣으면 그쪽만(한쪽 규격) 계산 */
+  limits?: { lsl?: number | null; usl?: number | null };
 };
 export type ChartSize = { width: number; height: number };
 
@@ -123,7 +128,7 @@ export function buildOption(cfg: ChartConfig, d: FramePayload, mode: Mode = 'lig
     case 'heatmap':
       return heatmap(cfg, d);
     case 'histogram':
-      return histogram(cfg, d);
+      return histogram(cfg, d, size);
     case 'scatter':
       return scatter(cfg, d);
     case 'xy':
@@ -132,6 +137,8 @@ export function buildOption(cfg: ChartConfig, d: FramePayload, mode: Mode = 'lig
       return box(cfg, d);
     case 'pie':
       return pie(cfg, d);
+    case 'scatter3d':
+      return scatter3D(cfg, d);
     default:
       return cartesian(cfg, d);
   }
@@ -443,7 +450,27 @@ function xyPlot(cfg: ChartConfig, d: FramePayload, size?: ChartSize) {
   };
 }
 
-function histogram(cfg: ChartConfig, d: FramePayload) {
+/** 평균 mean, 표준편차(모집단) sd 인 정규분포의 x 에서의 밀도값 */
+function normalPdf(x: number, mean: number, sd: number) {
+  return Math.exp(-0.5 * ((x - mean) / sd) ** 2) / (sd * Math.sqrt(2 * Math.PI));
+}
+
+/** 공정능력(Cp/Cpk): 규격 하한(LSL)/상한(USL) 대비 데이터가 3σ 안에 얼마나 여유 있게 들어있는지 */
+function capability(all: number[], lim: NonNullable<ChartConfig['limits']>) {
+  const n = all.length;
+  const mean = all.reduce((a, b) => a + b, 0) / n;
+  const sd = Math.sqrt(all.reduce((a, b) => a + (b - mean) ** 2, 0) / n) || 1e-9;
+  const cpu = lim.usl != null ? (lim.usl - mean) / (3 * sd) : undefined;
+  const cpl = lim.lsl != null ? (mean - lim.lsl) / (3 * sd) : undefined;
+  const sides = [cpu, cpl].filter((v): v is number => v !== undefined);
+  if (!sides.length) return null;
+  const cpk = Math.min(...sides);
+  const cp = lim.usl != null && lim.lsl != null ? (lim.usl - lim.lsl) / (6 * sd) : undefined;
+  const oob = all.filter((v) => (lim.lsl != null && v < lim.lsl) || (lim.usl != null && v > lim.usl)).length;
+  return { mean, sd, cpu, cpl, cpk, cp, oobPct: (oob / n) * 100, n };
+}
+
+function histogram(cfg: ChartConfig, d: FramePayload, size?: ChartSize) {
   const xi = colIdx(d, cfg.x);
   const bins = Math.max(2, cfg.bins ?? 20);
   const groups = seriesGroups(d, cfg.series);
@@ -452,7 +479,7 @@ function histogram(cfg: ChartConfig, d: FramePayload) {
   const lo = Math.min(...all), hi = Math.max(...all);
   const w = (hi - lo) / bins || 1;
   const labels = Array.from({ length: bins }, (_, i) => round(lo + w * (i + 0.5)));
-  const out = groups.map(([g, rows]) => {
+  const out: any[] = groups.map(([g, rows]) => {
     const counts = new Array(bins).fill(0);
     rows.forEach((r) => {
       const v = num(r[xi]);
@@ -461,14 +488,112 @@ function histogram(cfg: ChartConfig, d: FramePayload) {
     });
     return { name: g || cfg.x, type: 'bar', data: counts, barGap: '0%', barCategoryGap: '4%', itemStyle: { borderRadius: [4, 4, 0, 0], opacity: groups.length > 1 ? 0.8 : 1 } };
   });
-  const b = base(out.length > 1);
+
+  const lim = cfg.limits;
+  const cap = lim && (lim.lsl != null || lim.usl != null) ? capability(all, lim) : null;
+  if (cap) {
+    // 전체(그룹 구분 없이) 평균/표준편차를 따르는 정규분포 참고선 — 막대 수와 같은 척도(개수)로 스케일
+    out.push({
+      name: 'Normal fit',
+      type: 'line',
+      data: labels.map((x) => round(normalPdf(x, cap.mean, cap.sd) * cap.n * w)),
+      smooth: true,
+      symbol: 'none',
+      lineStyle: { width: 2, color: T.ink.secondary, type: 'dashed' },
+      tooltip: { show: false },
+      silent: true,
+      z: 5,
+    });
+  }
+
+  const legend = out.length > 1;
+  const b = base(legend);
+  const graphic: any[] = [];
+  let grid: any = { ...b.grid, left: 22, bottom: 26 };
+
+  if (cap && size && size.width > 160 && size.height > 140) {
+    // Cp/Cpk 주석을 정확한 픽셀 위치에 그리려고 이 경우만 containLabel 을 끄고 여백을 직접 계산
+    const left = 46, right = 16, top = legend ? 34 : 18, bottom = 34;
+    grid = { left, right, top, bottom, containLabel: false };
+    const pw = Math.max(1, size.width - left - right);
+    const ph = Math.max(1, size.height - top - bottom);
+    const xOf = (v: number) => left + ((v - lo) / (hi - lo || 1)) * pw;
+    (['lsl', 'usl'] as const).forEach((key) => {
+      const v = lim![key];
+      if (v == null) return;
+      const x = Math.max(left, Math.min(left + pw, xOf(v)));
+      graphic.push(
+        { type: 'line', silent: true, position: [x, 0], shape: { x1: 0, y1: top, x2: 0, y2: top + ph }, style: { stroke: T.series[1], lineWidth: 2, lineDash: [5, 4] } },
+        { type: 'text', silent: true, position: [x + 4, top + 2], style: { text: key.toUpperCase(), fill: T.series[1], fontSize: 11, fontWeight: 600 } },
+      );
+    });
+    const bad = (cap.cpk ?? 2) < 1;
+    const parts = [cap.cpk !== undefined ? `Cpk ${cap.cpk.toFixed(2)}` : '', cap.cp !== undefined ? `Cp ${cap.cp.toFixed(2)}` : '', `μ ${round(cap.mean)}`, `σ ${round(cap.sd)}`, `Out of spec ${cap.oobPct.toFixed(1)}% (n=${cap.n})`];
+    graphic.push({
+      type: 'text',
+      silent: true,
+      position: [left + 6, top + 4],
+      style: { text: parts.filter(Boolean).join(' · '), fill: bad ? T.ink.primary : T.ink.muted, fontWeight: bad ? 700 : 500, fontSize: 12 },
+    });
+  }
+
   return {
     ...b,
     tooltip: { ...b.tooltip, trigger: 'axis', axisPointer: { type: 'shadow' } },
     xAxis: { type: 'category', data: labels, name: cfg.x, nameLocation: 'middle', nameGap: 24, ...axisCommon(), splitLine: { show: false } },
     yAxis: { type: 'value', name: 'Count', nameLocation: 'middle', nameGap: 30, ...axisCommon() },
-    grid: { ...b.grid, left: 22, bottom: 26 },
+    graphic,
+    grid,
     series: out,
+  };
+}
+
+/**
+ * 3D 산점도: 세 숫자 컬럼을 X·Y·Z 좌표로 그림 (echarts-gl). 마우스 드래그로 회전, 휠로 확대/축소.
+ */
+function scatter3D(cfg: ChartConfig, d: FramePayload) {
+  const xi = colIdx(d, cfg.x);
+  const yi = colIdx(d, cfg.y?.[0]);
+  const zi = colIdx(d, cfg.z);
+  const ti = colIdx(d, cfg.tip);
+  if (xi < 0 || yi < 0 || zi < 0) return emptyOption('Set the X, Y and Z columns');
+  const groups = seriesGroups(d, cfg.series);
+  const series: any[] = [];
+  let total = 0;
+  groups.forEach(([g, rows], k) => {
+    const color = T.series[k % T.series.length];
+    const pts: [number, number, number, unknown?][] = [];
+    for (const r of rows) {
+      const x = num(r[xi]), y = num(r[yi]), z = num(r[zi]);
+      if (x !== null && y !== null && z !== null) pts.push([x, y, z, ti >= 0 ? r[ti] : undefined]);
+    }
+    if (!pts.length) return;
+    total += pts.length;
+    series.push({ name: g || [cfg.x, cfg.y?.[0], cfg.z].join(' · '), type: 'scatter3D', data: pts, symbolSize: 6, itemStyle: { color, opacity: 0.85 } });
+  });
+  if (!total) return emptyOption('No points to show');
+
+  const legend = groups.length > 1;
+  const { grid: _grid, ...b } = base(legend);
+  return {
+    ...b,
+    tooltip: {
+      ...b.tooltip,
+      formatter: (p: any) =>
+        `${p.seriesName}<br/>${tipLine(cfg, p.value[3])}${cfg.x}: <b>${round(p.value[0])}</b><br/>${cfg.y?.[0]}: <b>${round(p.value[1])}</b><br/>${cfg.z}: <b>${round(p.value[2])}</b>`,
+    },
+    legend: legend ? b.legend : { show: false },
+    grid3D: {
+      viewControl: { projection: 'perspective', autoRotate: false, distance: 180 },
+      axisLine: { lineStyle: { color: T.ink.axis } },
+      axisLabel: { color: T.ink.muted, fontSize: 10 },
+      splitLine: { lineStyle: { color: T.ink.grid } },
+      light: { main: { intensity: 1.2, shadow: false }, ambient: { intensity: 0.35 } },
+    },
+    xAxis3D: { type: 'value', name: cfg.x, axisLabel: { formatter: (v: number) => round(v) }, nameTextStyle: { color: T.ink.secondary } },
+    yAxis3D: { type: 'value', name: cfg.y?.[0], axisLabel: { formatter: (v: number) => round(v) }, nameTextStyle: { color: T.ink.secondary } },
+    zAxis3D: { type: 'value', name: cfg.z, axisLabel: { formatter: (v: number) => round(v) }, nameTextStyle: { color: T.ink.secondary } },
+    series,
   };
 }
 
@@ -575,9 +700,10 @@ function pie(cfg: ChartConfig, d: FramePayload) {
 export function neededColumns(w: { type: string; chart?: ChartConfig; stat?: { column?: string }; table?: { columns?: string[] } }): string[] {
   if (w.type === 'chart' && w.chart) {
     if (w.chart.kind === 'heatmap' && !w.chart.y?.length) return [];
-    const ys = w.chart.kind === 'xy' ? (w.chart.y ?? []).slice(0, 1) : w.chart.y ?? [];
-    const tip = w.chart.kind === 'scatter' || w.chart.kind === 'xy' ? w.chart.tip : undefined;
-    return [...new Set([w.chart.x, ...ys, w.chart.series, tip].filter(Boolean) as string[])];
+    const ys = w.chart.kind === 'xy' || w.chart.kind === 'scatter3d' ? (w.chart.y ?? []).slice(0, 1) : w.chart.y ?? [];
+    const tip = w.chart.kind === 'scatter' || w.chart.kind === 'xy' || w.chart.kind === 'scatter3d' ? w.chart.tip : undefined;
+    const z = w.chart.kind === 'scatter3d' ? w.chart.z : undefined;
+    return [...new Set([w.chart.x, ...ys, w.chart.series, tip, z].filter(Boolean) as string[])];
   }
   if (w.type === 'stat') return w.stat?.column ? [w.stat.column] : [];
   if (w.type === 'table') return w.table?.columns ?? [];

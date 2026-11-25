@@ -99,6 +99,17 @@ DEMO_SELECTION_WIDGETS = [
      "table": {"columns": ["drive.VAID", "blade._equipment", "blade.Tray No", "blade.Tray Position", "drive._equipment", "drive.QRCODE",
                            "drive.Position No", "drive.F14 Area", "eol._equipment", "eol.F1440 Area"], "pageSize": 10},
      "link": {"mode": "column", "column": "drive.VAID"}},
+    # 슬라이더로 차트의 Y(값) 컬럼 자체를 바꾸는 예시: 0=F14 Area, 1=F1440 Area 로 그래프가 자동으로 바뀜
+    {"i": "w15", "x": 0, "y": 46, "w": 4, "h": 5, "type": "control", "title": "Metric",
+     "control": {"kind": "slider", "paramId": "metric", "options": [{"label": "F14 Area", "value": "F14 Area"}, {"label": "F1440 Area", "value": "F1440 Area"}]}},
+    {"i": "w16", "x": 4, "y": 46, "w": 8, "h": 9, "type": "chart", "title": "Metric distribution (slider-controlled)", "dataset": "pin_area_data",
+     "chart": {"kind": "histogram", "x": "$metric", "series": "blade_machine", "bins": 30}, "link": {"mode": "off"}},
+    # 공정능력(Cpk): EOL 판정 기준(F1440 Area > 86)을 그대로 규격 하한(LSL)으로 써서 실제 합/불 기준과 일치시킴
+    {"i": "w17", "x": 0, "y": 55, "w": 7, "h": 10, "type": "chart", "title": "F1440 Area — Process capability (Cpk)", "dataset": "pin_area_data",
+     "chart": {"kind": "histogram", "x": "F1440 Area", "bins": 24, "limits": {"lsl": 86}}, "link": {"mode": "off"}},
+    # 3D 산점도: Blade 조립 단계의 base pin 위치(X·Y)가 구동검사 F14 Area 에 미치는 영향을 한 화면에서
+    {"i": "w18", "x": 7, "y": 55, "w": 5, "h": 10, "type": "chart", "title": "base pin (X·Y) × F14 Area", "dataset": "pin_area_data",
+     "chart": {"kind": "scatter3d", "x": "base_pin_x", "y": ["base_pin_y"], "z": "F14 Area", "series": "blade_machine", "tip": "VAID"}, "link": {"mode": "off"}},
 ]
 
 

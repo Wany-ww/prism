@@ -1,10 +1,11 @@
-import { Alert, Button, Col, Divider, Form, Input, InputNumber, Modal, Radio, Row, Select, Space, Switch, Typography } from 'antd';
+import { Alert, AutoComplete, Button, Col, Divider, Form, Input, InputNumber, Modal, Radio, Row, Select, Space, Switch, Typography } from 'antd';
+import type { DefaultOptionType } from 'antd/es/select';
 import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Dataset } from '../api';
 import { ChartKind, neededColumns } from './charts';
-import type { Layer } from './link';
-import { canHighlight, Widget } from './Widget';
+import { Layer, paramIdOf, paramToken } from './link';
+import { canHighlight, ControlOption, Widget } from './Widget';
 
 const KINDS: { value: ChartKind; label: string }[] = [
   { value: 'line', label: 'Line (trend)' },
@@ -16,14 +17,34 @@ const KINDS: { value: ChartKind; label: string }[] = [
   { value: 'box', label: 'Box plot' },
   { value: 'heatmap', label: 'Heatmap (matrix)' },
   { value: 'pie', label: 'Donut (share)' },
+  { value: 'scatter3d', label: '3D scatter' },
 ];
 
-export default function WidgetEditor({ value, datasets, onOk, onCancel }: { value: Widget; datasets: Dataset[]; onOk: (w: Widget) => void; onCancel: () => void }) {
+export default function WidgetEditor({
+  value,
+  datasets,
+  paramIds,
+  onOk,
+  onCancel,
+}: {
+  value: Widget;
+  datasets: Dataset[];
+  /** 대시보드에 이미 있는 컨트롤 위젯들의 paramId — 차트 등에서 "⚙ 파라미터"로 고를 수 있게 함 */
+  paramIds: string[];
+  onOk: (w: Widget) => void;
+  onCancel: () => void;
+}) {
   const [w, setW] = useState<Widget>(value);
   const ds = datasets.find((d) => d.name === w.dataset);
   const colsOf = (name?: string) => (datasets.find((d) => d.name === name)?.columns ?? []).map((c) => ({ value: c.name, label: `${c.name}  ·  ${c.dtype}` }));
-  const cols = colsOf(w.dataset);
-  const numCols = (ds?.columns ?? []).filter((c) => c.dtype === 'number').map((c) => ({ value: c.name, label: c.name }));
+  const paramOpts = paramIds.map((id) => ({ value: paramToken(id), label: `⚙ ${id}` }));
+  /** 컬럼 목록에 "⚙ 파라미터" 선택지를 더함 (컨트롤 위젯이 있을 때만) */
+  const withParams = (base: DefaultOptionType[]): DefaultOptionType[] => (paramOpts.length ? [{ label: 'Columns', options: base }, { label: 'Parameters', options: paramOpts }] : base);
+  const rawCols = colsOf(w.dataset);
+  const cols = withParams(rawCols);
+  const numCols = withParams((ds?.columns ?? []).filter((c) => c.dtype === 'number').map((c) => ({ value: c.name, label: c.name })));
+  const allColNames = useMemo(() => [...new Set(datasets.flatMap((d) => d.columns.map((c) => c.name)))], [datasets]);
+  const colSuggest = useMemo(() => allColNames.map((c) => ({ value: c })), [allColNames]);
   const chart = w.chart ?? { kind: 'line' as ChartKind, y: [] };
   const setChart = (p: Partial<typeof chart>) => setW({ ...w, chart: { ...chart, ...p } });
   const spec = chart.spec ?? {};
@@ -32,9 +53,17 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
   const layers = w.layers ?? [];
   const setLayer = (i: number, p: Partial<Layer>) => setW({ ...w, layers: layers.map((l, j) => (j === i ? { ...l, ...p } : l)) });
 
-  // 겹친 데이터셋에서 대응시켜야 하는 컬럼 (위젯이 쓰는 컬럼 + 선택/연동 컬럼)
-  const used = [...new Set([...neededColumns(w), w.type === 'table' ? w.select?.column : undefined, w.link?.mode === 'column' ? w.link.column : undefined].filter(Boolean) as string[])];
+  // 겹친 데이터셋에서 대응시켜야 하는 컬럼 (위젯이 쓰는 컬럼 + 선택/연동 컬럼). 파라미터 토큰(⚙)은
+  // 실행 중에 실제 컬럼명으로 바뀐 뒤에만 알 수 있으므로 여기서는 제외.
+  const used = [...new Set([...neededColumns(w), w.type === 'table' ? w.select?.column : undefined, w.link?.mode === 'column' ? w.link.column : undefined].filter(Boolean) as string[])].filter(
+    (c) => paramIdOf(c) === null,
+  );
   const isXY = w.type === 'chart' && kind === 'xy';
+  const is3D = w.type === 'chart' && kind === 'scatter3d';
+  const limits = chart.limits ?? {};
+  const setLimits = (p: Partial<typeof limits>) => setChart({ limits: { ...limits, ...p } });
+  const ctrlOptions = w.control?.options ?? [];
+  const setControlOptions = (options: ControlOption[]) => setW({ ...w, control: { ...w.control, options } });
 
   return (
     <Modal open width={760} title="Widget settings" onOk={() => onOk(w)} onCancel={onCancel} okText="Apply" destroyOnClose styles={{ body: { maxHeight: '72vh', overflowY: 'auto', paddingRight: 8 } }}>
@@ -50,18 +79,22 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
               <Radio.Group
                 value={w.type}
                 optionType="button"
-                onChange={(e) => setW({ ...w, type: e.target.value })}
+                onChange={(e) => {
+                  const t = e.target.value;
+                  setW({ ...w, type: t, control: t === 'control' ? w.control ?? { kind: 'dropdown', options: [{ label: '', value: '' }] } : w.control });
+                }}
                 options={[
                   { value: 'chart', label: 'Chart' },
                   { value: 'table', label: 'Table' },
                   { value: 'stat', label: 'Stat' },
                   { value: 'text', label: 'Text' },
+                  { value: 'control', label: 'Control' },
                 ]}
               />
             </Form.Item>
           </Col>
         </Row>
-        {w.type !== 'text' && (
+        {w.type !== 'text' && w.type !== 'control' && (
           <>
             <Row gutter={12}>
               <Col span={layers.length ? 15 : 24}>
@@ -155,7 +188,7 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
         {w.type === 'chart' && (
           <>
             <Form.Item label="Chart">
-              <Select value={kind} options={KINDS} onChange={(v) => setChart({ kind: v, ...(v === 'xy' ? { y: (chart.y ?? []).slice(0, 1) } : {}) })} />
+              <Select value={kind} options={KINDS} onChange={(v) => setChart({ kind: v, ...(v === 'xy' || v === 'scatter3d' ? { y: (chart.y ?? []).slice(0, 1) } : {}) })} />
             </Form.Item>
             {isXY ? (
               <Row gutter={12}>
@@ -167,6 +200,24 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
                 <Col span={12}>
                   <Form.Item label="Y position">
                     <Select allowClear showSearch value={chart.y?.[0]} options={numCols} onChange={(v) => setChart({ y: v ? [v] : [] })} />
+                  </Form.Item>
+                </Col>
+              </Row>
+            ) : is3D ? (
+              <Row gutter={12}>
+                <Col span={8}>
+                  <Form.Item label="X">
+                    <Select allowClear showSearch value={chart.x} options={numCols} onChange={(v) => setChart({ x: v })} />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item label="Y">
+                    <Select allowClear showSearch value={chart.y?.[0]} options={numCols} onChange={(v) => setChart({ y: v ? [v] : [] })} />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item label="Z">
+                    <Select allowClear showSearch value={chart.z} options={numCols} onChange={(v) => setChart({ z: v })} />
                   </Form.Item>
                 </Col>
               </Row>
@@ -187,14 +238,14 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
               </Row>
             )}
             <Row gutter={12}>
-              {['line', 'area', 'bar', 'scatter', 'xy', 'histogram'].includes(kind) && (
+              {['line', 'area', 'bar', 'scatter', 'xy', 'histogram', 'scatter3d'].includes(kind) && (
                 <Col span={12}>
-                  <Form.Item label="Series (color by)" extra={isXY ? '예: 설비별로 색 구분' : 'Y 가 1개일 때 이 컬럼 값별로 나눠 표시'}>
+                  <Form.Item label="Series (color by)" extra={isXY || is3D ? '예: 설비별로 색 구분' : 'Y 가 1개일 때 이 컬럼 값별로 나눠 표시'}>
                     <Select allowClear showSearch value={chart.series} options={cols} onChange={(v) => setChart({ series: v })} />
                   </Form.Item>
                 </Col>
               )}
-              {(kind === 'scatter' || isXY) && (
+              {(kind === 'scatter' || isXY || is3D) && (
                 <Col span={12}>
                   <Form.Item label="Tooltip column" extra="점에 마우스를 올리면 함께 보여줌 (예: VAID)">
                     <Select allowClear showSearch value={chart.tip} options={cols} onChange={(v) => setChart({ tip: v })} />
@@ -241,6 +292,14 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
                 </Col>
               )}
             </Row>
+            {kind === 'histogram' && (
+              <Form.Item label="Process capability (Cp/Cpk)" extra="규격 하한(LSL)·상한(USL)을 하나 이상 넣으면 히스토그램에 규격선과 Cp/Cpk 가 표시됩니다. 하나만 넣으면 그쪽 규격만(편측) 계산">
+                <Space wrap>
+                  <InputNumber addonBefore="LSL" step={0.001} value={limits.lsl} onChange={(v) => setLimits({ lsl: v })} style={{ width: 170 }} />
+                  <InputNumber addonBefore="USL" step={0.001} value={limits.usl} onChange={(v) => setLimits({ usl: v })} style={{ width: 170 }} />
+                </Space>
+              </Form.Item>
+            )}
             {isXY && (
               <>
                 <Row gutter={12}>
@@ -345,7 +404,59 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
             <Input.TextArea autoSize={{ minRows: 4 }} value={w.text?.content} onChange={(e) => setW({ ...w, text: { content: e.target.value } })} />
           </Form.Item>
         )}
-        {w.type !== 'text' && (
+        {w.type === 'control' && (
+          <>
+            <Row gutter={12}>
+              <Col span={10}>
+                <Form.Item label="Control type">
+                  <Radio.Group
+                    optionType="button"
+                    value={w.control?.kind ?? 'dropdown'}
+                    onChange={(e) => setW({ ...w, control: { ...w.control, kind: e.target.value } })}
+                    options={[
+                      { value: 'dropdown', label: 'Dropdown' },
+                      { value: 'slider', label: 'Slider' },
+                    ]}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={14}>
+                <Form.Item label="Parameter name" extra="다른 위젯에서 이 이름(⚙)으로 골라 이 컨트롤에 연결합니다. 예: metric">
+                  <Input value={w.control?.paramId ?? ''} placeholder="metric" onChange={(e) => setW({ ...w, control: { ...w.control, paramId: e.target.value.trim() } })} />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Form.Item
+              label={w.control?.kind === 'slider' ? 'Steps, in order (0, 1, 2 …)' : 'Options'}
+              extra="고를 이름과, 고르면 차트 등에 실제로 쓰일 컬럼명. 예) F14 Area → F14 Area"
+            >
+              {ctrlOptions.map((o, i) => (
+                <Row key={i} gutter={8} align="middle" style={{ marginBottom: 6 }}>
+                  <Col span={9}>
+                    <Input placeholder="Label (e.g. F14 Area)" value={o.label} onChange={(e) => setControlOptions(ctrlOptions.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} />
+                  </Col>
+                  <Col span={12}>
+                    <AutoComplete
+                      style={{ width: '100%' }}
+                      placeholder="Column name"
+                      options={colSuggest}
+                      filterOption={(q, o) => (o?.value ?? '').toLowerCase().includes(q.toLowerCase())}
+                      value={o.value}
+                      onChange={(v) => setControlOptions(ctrlOptions.map((x, j) => (j === i ? { ...x, value: v } : x)))}
+                    />
+                  </Col>
+                  <Col span={3}>
+                    <Button type="text" icon={<MinusCircleOutlined />} onClick={() => setControlOptions(ctrlOptions.filter((_, j) => j !== i))} />
+                  </Col>
+                </Row>
+              ))}
+              <Button size="small" icon={<PlusOutlined />} onClick={() => setControlOptions([...ctrlOptions, { label: '', value: '' }])}>
+                Add option
+              </Button>
+            </Form.Item>
+          </>
+        )}
+        {w.type !== 'text' && w.type !== 'control' && (
           <>
             <Divider style={{ margin: '4px 0 14px' }} />
             <Form.Item label="React to selection in other widgets" extra="테이블에서 행을 클릭해 선택한 값(예: VAID)을 이 위젯에 어떻게 반영할지">
@@ -361,7 +472,7 @@ export default function WidgetEditor({ value, datasets, onOk, onCancel }: { valu
             </Form.Item>
             {w.link?.mode === 'column' && (
               <Form.Item label="Column to compare with selection">
-                <Select showSearch value={w.link.column} options={cols} onChange={(v) => setW({ ...w, link: { ...w.link, column: v } })} />
+                <Select showSearch value={w.link.column} options={rawCols} onChange={(v) => setW({ ...w, link: { ...w.link, column: v } })} />
               </Form.Item>
             )}
             {(w.link?.mode ?? 'auto') === 'auto' && (
