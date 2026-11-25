@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 from sqlalchemy import select
 
+from ..alerts import send_alert
 from ..db import SessionLocal
 from ..models import Flow, NodeType
 from .builtin import BUILTINS, NodeError
@@ -144,6 +145,7 @@ def run_flow(flow_id: int, trigger: str = "manual") -> dict:
         flow = db.get(Flow, flow_id)
         if flow is None:
             return {"status": "error", "error": "Flow not found"}
+        was_bad = flow.last_status == "error"
         try:
             _, status = execute_graph(db, flow.graph or {}, save=True, flow_id=flow.id)
             errors = [f"{nid}: {s.get('error')}" for nid, s in status.items() if s["status"] == "error"]
@@ -157,4 +159,9 @@ def run_flow(flow_id: int, trigger: str = "manual") -> dict:
         if flow.schedule_minutes:
             flow.next_run_at = flow.last_run_at + timedelta(minutes=flow.schedule_minutes)
         db.commit()
+        is_bad = flow.last_status == "error"
+        if is_bad and not was_bad:
+            send_alert("flow_error", f"[{flow.name}] Flow 실행 오류", flow.last_error, key=f"flow:{flow.id}")
+        elif was_bad and not is_bad:
+            send_alert("flow_recovered", f"[{flow.name}] Flow 정상화", "", key=f"flow:{flow.id}")
         return {"status": flow.last_status, "error": flow.last_error, "nodes": status}

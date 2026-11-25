@@ -240,6 +240,23 @@ export default function WidgetView({
     onSelect(values.length ? { column, values, source: w.i, dataset: src.dataset } : null);
   };
 
+  // ---- 차트(산점도/XY/3D): 툴팁 컬럼이 있으면 점 클릭으로도 선택 (같은 점을 다시 누르면 해제) ----
+  const canClickSelect = w.type === 'chart' && !!w.chart?.tip && (w.chart.kind === 'scatter' || w.chart.kind === 'xy' || w.chart.kind === 'scatter3d');
+  const onChartClick = (p: any) => {
+    const tip = w.chart?.tip;
+    const arr = p?.value;
+    if (!tip || !Array.isArray(arr)) return;
+    const tipIdx = w.chart!.kind === 'scatter3d' ? 3 : 2; // [x,y,tip,ds] 또는 3D [x,y,z,tip,ds]
+    const v = normKey(arr[tipIdx]);
+    if (!v) return;
+    const dsLabel = arr[tipIdx + 1];
+    const sources = widgetSources(w);
+    const src = (dsLabel != null ? sources.find((s) => s.label === dsLabel) : undefined) ?? sources[0];
+    const column = (src?.map?.[tip] || tip)!;
+    const cleared = isSource && selection!.column === column && selection!.values.length === 1 && selection!.values[0] === v;
+    onSelect(cleared ? null : { column, values: [v], source: w.i, dataset: src?.dataset ?? w.dataset! });
+  };
+
   const tableData = useMemo(() => {
     if (!data || w.type !== 'table' || !q.trim()) return data;
     const s = q.trim().toLowerCase();
@@ -301,7 +318,15 @@ export default function WidgetView({
   } else if (linked && behavior === 'filter' && !data.rows.length) {
     body = <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No data for the selected value" />;
   } else if (w.type === 'chart' && option) {
-    body = <ReactECharts option={option} notMerge lazyUpdate style={{ height: '100%', width: '100%' }} />;
+    body = (
+      <ReactECharts
+        option={option}
+        notMerge
+        lazyUpdate
+        style={{ height: '100%', width: '100%' }}
+        onEvents={canClickSelect ? { click: onChartClick } : undefined}
+      />
+    );
   } else if (w.type === 'table') {
     const cols = w.table?.columns?.length ? [...(dsIdx >= 0 ? [DS_COL] : []), ...w.table.columns] : undefined;
     body = (
@@ -351,6 +376,11 @@ export default function WidgetView({
       <div className="dash-widget-head drag-handle">
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: w.type === 'stat' ? 13 : undefined, fontWeight: w.type === 'stat' ? 500 : undefined, color: w.type === 'stat' ? 'var(--text-2)' : undefined }}>
           <span className="ellipsis">{w.title}</span>
+          {canClickSelect && (
+            <Tooltip title={`Click a point to filter other widgets by ${w.chart!.tip}`}>
+              <AimOutlined style={{ color: 'var(--text-4)', fontSize: 12 }} />
+            </Tooltip>
+          )}
           {w.type === 'control' && ctrl?.paramId && (
             <Tooltip title={`Other widgets bound to '${ctrl.paramId}' follow this`}>
               <Tag bordered={false} color="purple" icon={<SlidersOutlined />} style={{ margin: 0 }}>

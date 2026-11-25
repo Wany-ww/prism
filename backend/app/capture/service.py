@@ -6,6 +6,7 @@ from datetime import datetime
 import pandas as pd
 from sqlalchemy import delete, insert, select
 
+from ..alerts import send_alert
 from ..db import SessionLocal
 from ..engine.usercode import UserCodeError, call_user, load_function, to_frame
 from ..models import CapturedFile, CaptureRun, Equipment, Record
@@ -117,6 +118,7 @@ def _err_text(e: Exception) -> str:
 
 
 def _finish(db, eq: Equipment, run: CaptureRun, status: str, message: str):
+    was_bad = bool(eq.last_error)  # 지난 수집이 error/warning 이었는지 (상태 전환 때만 알림을 보내기 위함)
     run.status, run.message, run.finished_at = status, message[:8000], datetime.now()
     eq.status = status
     eq.last_capture_at = run.finished_at
@@ -124,6 +126,11 @@ def _finish(db, eq: Equipment, run: CaptureRun, status: str, message: str):
     if status != "error":
         eq.last_success_at = run.finished_at
     db.commit()
+    is_bad = status != "ok"
+    if is_bad and not was_bad:
+        send_alert("equipment_error", f"[{eq.name}] 수집 {status}", message, key=f"equipment:{eq.id}")
+    elif was_bad and not is_bad:
+        send_alert("equipment_recovered", f"[{eq.name}] 수집 정상화", message, key=f"equipment:{eq.id}")
 
 
 def run_capture(equipment_id: int, trigger: str = "schedule") -> dict:

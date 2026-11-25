@@ -211,6 +211,8 @@ python prism_agent.py --server http://<서버IP>:8000 --equipment "Blade 조립�
 | `PRISM_NEO4J_URI` | (없음) | 예 `bolt://127.0.0.1:7687`. 비어 있으면 Neo4j 기능 꺼짐 |
 | `PRISM_NEO4J_USER` / `PRISM_NEO4J_PASSWORD` | `neo4j` / (없음) | Neo4j 계정 |
 | `PRISM_NEO4J_DATABASE` | `neo4j` | 사용할 데이터베이스 |
+| `PRISM_ALERT_WEBHOOK` | (없음) | Slack 등 incoming webhook URL. 설정하면 설비 수집/Flow 실행이 오류↔정상 상태를 오갈 때 알림 전송 |
+| `PRISM_ALERT_MIN_INTERVAL_SEC` | `300` | 같은 설비/Flow 는 이 시간(초) 안에 한 번만 알림 (상태가 자주 바뀌어도 스팸 방지) |
 
 환경변수는 `backend\.env` 파일(`KEY=VALUE`, git 제외)에 적어 두어도 됩니다. 이미 설정된 환경변수가 우선합니다.
 

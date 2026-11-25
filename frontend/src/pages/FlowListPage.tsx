@@ -1,10 +1,11 @@
 import { App, Button, Input, Modal, Popconfirm, Space, Table, Tag, Tooltip, Typography } from 'antd';
-import { CopyOutlined, DeleteOutlined, PlusOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { CopyOutlined, DeleteOutlined, DownloadOutlined, PlusOutlined, ThunderboltOutlined, UploadOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, FlowKind, FlowSummary, fmtTime } from '../api';
 import StageHeader from '../components/StageHeader';
 import StatusTag from '../components/StatusTag';
+import { pickJsonFile } from '../importJson';
 
 export default function FlowListPage({ kind }: { kind: FlowKind }) {
   const { message } = App.useApp();
@@ -34,15 +35,31 @@ export default function FlowListPage({ kind }: { kind: FlowKind }) {
     }
   };
 
+  const doImport = async () => {
+    try {
+      const json = await pickJsonFile();
+      const f = await api.post('/api/flows/import', json);
+      message.success(`Imported [${f.name}].`);
+      load();
+    } catch (e: any) {
+      if (e?.message) message.error(e.message);
+    }
+  };
+
   const isMatch = kind === 'match';
   return (
     <div className="page">
       <StageHeader
         stage={isMatch ? 'match' : 'analysis'}
         extra={
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>
-            New flow
-          </Button>
+          <Space>
+            <Button icon={<UploadOutlined />} onClick={doImport}>
+              Import
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>
+              New flow
+            </Button>
+          </Space>
         }
       />
       <Typography.Paragraph type="secondary" style={{ marginTop: -8, marginBottom: 20 }}>
@@ -86,11 +103,14 @@ export default function FlowListPage({ kind }: { kind: FlowKind }) {
           },
           {
             title: '',
-            width: 130,
+            width: 170,
             render: (_, f) => (
               <Space size={2} onClick={(e) => e.stopPropagation()}>
                 <Tooltip title="Run · save outputs">
                   <Button type="text" icon={<ThunderboltOutlined />} loading={running === f.id} onClick={() => run(f)} />
+                </Tooltip>
+                <Tooltip title="Export">
+                  <Button type="text" icon={<DownloadOutlined />} href={`/api/flows/${f.id}/export`} />
                 </Tooltip>
                 <Tooltip title="Duplicate">
                   <Button type="text" icon={<CopyOutlined />} onClick={() => api.post(`/api/flows/${f.id}/duplicate`).then(load)} />

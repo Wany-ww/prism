@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..engine.flow import preview, run_flow
 from ..models import Flow, NodeType
-from .common import get_or_404, row_dict
+from .common import get_or_404, json_download, row_dict
 
 router = APIRouter(prefix="/api", tags=["flows"])
 
@@ -161,6 +161,37 @@ def delete_flow(fid: int, db: Session = Depends(get_db)):
     db.delete(get_or_404(db, Flow, fid))
     db.commit()
     return {"ok": True}
+
+
+@router.get("/flows/{fid}/export")
+def export_flow(fid: int, db: Session = Depends(get_db)):
+    """다른 PRISM 서버로 옮길 수 있게 Flow 정의를 .json 파일로 내려받음 (설비/데이터셋 id 가 아니라 이름으로 참조하므로,
+    그대로 옮겨서는 못 쓸 수 있고 옮긴 뒤 설비 데이터 노드 등을 다시 확인해야 할 수 있음)."""
+    f = get_or_404(db, Flow, fid)
+    payload = {
+        "_type": "prism-flow",
+        "version": 1,
+        "name": f.name,
+        "kind": f.kind,
+        "description": f.description,
+        "schedule_minutes": f.schedule_minutes,
+        "graph": f.graph,
+    }
+    return json_download(payload, f.name)
+
+
+@router.post("/flows/import")
+def import_flow(body: dict, db: Session = Depends(get_db)):
+    if body.get("_type") != "prism-flow":
+        raise HTTPException(400, "This file is not a PRISM flow export.")
+    name = str(body.get("name") or "Imported flow").strip() or "Imported flow"
+    kind = body.get("kind") if body.get("kind") in ("match", "analysis") else "analysis"
+    graph = body.get("graph") if isinstance(body.get("graph"), dict) else {"nodes": [], "edges": []}
+    # 자동 실행은 끈 채로 들여오기 — 옮긴 환경에 설비/데이터셋이 그대로 있는지 확인한 뒤 켜도록
+    f = Flow(name=f"{name} (imported)", kind=kind, description=str(body.get("description") or ""), graph=graph, schedule_minutes=0)
+    db.add(f)
+    db.commit()
+    return row_dict(f)
 
 
 @router.post("/flows/preview")

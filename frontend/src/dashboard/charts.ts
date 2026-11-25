@@ -219,14 +219,14 @@ function linreg(pts: [number, number, ...unknown[]][]) {
 
 const emptyOption = (text: string) => ({ title: { text, left: 'center', top: 'middle', textStyle: { color: T.ink.muted, fontSize: 13, fontWeight: 400 } } });
 
-type Pt = [number, number, unknown];
-/** 행 → [x, y, 툴팁값] (숫자가 아닌 좌표는 제외) */
-function points(rows: unknown[][], xi: number, yi: number, ti: number, only?: Set<unknown[]> | null): Pt[] {
+type Pt = [number, number, unknown, unknown];
+/** 행 → [x, y, 툴팁값, _dataset 값] (숫자가 아닌 좌표는 제외). 뒤 두 값은 점 클릭으로 선택할 때 씀 */
+function points(rows: unknown[][], xi: number, yi: number, ti: number, dsi: number, only?: Set<unknown[]> | null): Pt[] {
   const out: Pt[] = [];
   for (const r of rows) {
     if (only && !only.has(r)) continue;
     const x = num(r[xi]), y = num(r[yi]);
-    if (x !== null && y !== null) out.push([x, y, ti >= 0 ? r[ti] : undefined]);
+    if (x !== null && y !== null) out.push([x, y, ti >= 0 ? r[ti] : undefined, dsi >= 0 ? r[dsi] : undefined]);
   }
   return out;
 }
@@ -249,6 +249,7 @@ const tipLine = (cfg: ChartConfig, v: unknown) => (cfg.tip && v !== undefined &&
 function scatter(cfg: ChartConfig, d: FramePayload) {
   const xi = colIdx(d, cfg.x);
   const ti = colIdx(d, cfg.tip);
+  const dsi = colIdx(d, DS_COL);
   const ys = (cfg.y ?? []).filter((y) => colIdx(d, y) >= 0);
   const groups = seriesGroups(d, cfg.series);
   const sel = selectedRows(d);
@@ -258,11 +259,11 @@ function scatter(cfg: ChartConfig, d: FramePayload) {
   for (const [gname, rows] of groups) {
     for (const y of ys) {
       const yi = colIdx(d, y);
-      const pts = points(rows, xi, yi, ti);
+      const pts = points(rows, xi, yi, ti, dsi);
       const name = gname ? (ys.length > 1 ? `${gname} · ${y}` : gname) : y;
       const color = T.series[k++ % T.series.length];
       out.push({ name, type: 'scatter', data: pts, symbolSize: 7, large: !hl && pts.length > 5000, itemStyle: { color, opacity: hl ? 0.12 : 0.5, borderColor: T.ink.surface, borderWidth: 1 } });
-      if (hl) out.push(selectedSeries(name, color, points(rows, xi, yi, ti, sel)));
+      if (hl) out.push(selectedSeries(name, color, points(rows, xi, yi, ti, dsi, sel)));
       if (cfg.trendline) {
         const lr = linreg(pts);
         if (lr) {
@@ -310,6 +311,7 @@ function xyPlot(cfg: ChartConfig, d: FramePayload, size?: ChartSize) {
   const yName = cfg.y?.[0];
   const yi = colIdx(d, yName);
   const ti = colIdx(d, cfg.tip);
+  const dsi = colIdx(d, DS_COL);
   if (xi < 0 || yi < 0) return emptyOption('Set the X and Y columns');
   const sel = selectedRows(d);
   const hl = !!sel?.size;
@@ -333,7 +335,7 @@ function xyPlot(cfg: ChartConfig, d: FramePayload, size?: ChartSize) {
   groups.forEach(([g, rows], k) => {
     const name = g || single;
     const color = T.series[k % T.series.length];
-    const pts = points(rows, xi, yi, ti);
+    const pts = points(rows, xi, yi, ti, dsi);
     if (!pts.length) return;
     const ins: Pt[] = [], outs: Pt[] = [];
     let sx = 0, sy = 0;
@@ -347,7 +349,7 @@ function xyPlot(cfg: ChartConfig, d: FramePayload, size?: ChartSize) {
     series.push({ name, type: 'scatter', data: ins, symbolSize: 6, large: !hl && ins.length > 5000, itemStyle: { color, opacity: hl ? 0.12 : 0.55, borderColor: T.ink.surface, borderWidth: 0.5 } });
     if (outs.length)
       series.push({ name, type: 'scatter', data: outs, symbol: 'triangle', symbolSize: 9, itemStyle: { color, opacity: hl ? 0.2 : 1, borderColor: T.ink.primary, borderWidth: 1 }, z: 4 });
-    if (hl) series.push(selectedSeries(name, color, points(rows, xi, yi, ti, sel)));
+    if (hl) series.push(selectedSeries(name, color, points(rows, xi, yi, ti, dsi, sel)));
     if (cfg.centroid ?? true) {
       const mx = sx / pts.length, my = sy / pts.length;
       const sdx = Math.sqrt(pts.reduce((a, p) => a + (p[0] - mx) ** 2, 0) / pts.length);
@@ -563,16 +565,17 @@ function scatter3D(cfg: ChartConfig, d: FramePayload) {
   const yi = colIdx(d, cfg.y?.[0]);
   const zi = colIdx(d, cfg.z);
   const ti = colIdx(d, cfg.tip);
+  const dsi = colIdx(d, DS_COL);
   if (xi < 0 || yi < 0 || zi < 0) return emptyOption('Set the X, Y and Z columns');
   const groups = seriesGroups(d, cfg.series);
   const series: any[] = [];
   let total = 0;
   groups.forEach(([g, rows], k) => {
     const color = T.series[k % T.series.length];
-    const pts: [number, number, number, unknown?][] = [];
+    const pts: [number, number, number, unknown, unknown][] = [];
     for (const r of rows) {
       const x = num(r[xi]), y = num(r[yi]), z = num(r[zi]);
-      if (x !== null && y !== null && z !== null) pts.push([x, y, z, ti >= 0 ? r[ti] : undefined]);
+      if (x !== null && y !== null && z !== null) pts.push([x, y, z, ti >= 0 ? r[ti] : undefined, dsi >= 0 ? r[dsi] : undefined]);
     }
     if (!pts.length) return;
     total += pts.length;

@@ -32,6 +32,11 @@ SCHEDULER_WORKERS = int(os.environ.get("PRISM_WORKERS", "4"))
 AGENT_TOKEN = os.environ.get("PRISM_AGENT_TOKEN", "")
 SEED_DEMO = os.environ.get("PRISM_SEED_DEMO", "1") == "1"
 
+# 알림 웹훅 (Slack 등 incoming webhook 호환 URL). 비어 있으면 알림 기능이 꺼진다.
+ALERT_WEBHOOK = os.environ.get("PRISM_ALERT_WEBHOOK", "")
+# 같은 설비/Flow 는 이 시간(초) 안에 한 번만 알림 (상태가 자주 바뀌어도 스팸 방지)
+ALERT_MIN_INTERVAL_SEC = int(os.environ.get("PRISM_ALERT_MIN_INTERVAL_SEC", "300"))
+
 # Neo4j 제품 계보 그래프 (선택). URI 가 비어 있으면 그래프 기능은 꺼진다.
 NEO4J_URI = os.environ.get("PRISM_NEO4J_URI", "")
 NEO4J_USER = os.environ.get("PRISM_NEO4J_USER", "neo4j")

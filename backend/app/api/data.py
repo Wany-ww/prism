@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..engine.frames import delete_dataset_file, frame_payload, load_dataset
 from ..models import CapturedFile, CaptureRun, Dashboard, Dataset, Equipment, Flow, NodeType, Parser, Record
-from .common import get_or_404, row_dict
+from .common import get_or_404, json_download, row_dict
 
 router = APIRouter(prefix="/api", tags=["data"])
 
@@ -160,6 +160,35 @@ def delete_dashboard(did: int, db: Session = Depends(get_db)):
     db.delete(get_or_404(db, Dashboard, did))
     db.commit()
     return {"ok": True}
+
+
+@router.get("/dashboards/{did}/export")
+def export_dashboard(did: int, db: Session = Depends(get_db)):
+    """다른 PRISM 서버로 옮길 수 있게 대시보드 정의를 .json 파일로 내려받음 (위젯은 데이터셋 이름으로 참조하므로,
+    옮긴 환경에 같은 이름의 데이터셋이 있어야 그대로 동작함)."""
+    d = get_or_404(db, Dashboard, did)
+    payload = {
+        "_type": "prism-dashboard",
+        "version": 1,
+        "name": d.name,
+        "description": d.description,
+        "refresh_sec": d.refresh_sec,
+        "layout": d.layout,
+    }
+    return json_download(payload, d.name)
+
+
+@router.post("/dashboards/import")
+def import_dashboard(body: dict, db: Session = Depends(get_db)):
+    if body.get("_type") != "prism-dashboard":
+        raise HTTPException(400, "This file is not a PRISM dashboard export.")
+    name = str(body.get("name") or "Imported dashboard").strip() or "Imported dashboard"
+    layout = body.get("layout") if isinstance(body.get("layout"), dict) else {"widgets": []}
+    refresh_sec = body.get("refresh_sec") if isinstance(body.get("refresh_sec"), int) else 0
+    d = Dashboard(name=f"{name} (imported)", description=str(body.get("description") or ""), layout=layout, refresh_sec=refresh_sec)
+    db.add(d)
+    db.commit()
+    return row_dict(d)
 
 
 # ---------- Overview ----------
