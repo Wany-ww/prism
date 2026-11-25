@@ -13,7 +13,7 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import { App, Button, Empty, Input, Select, Space, Tag, Tooltip, Typography } from 'antd';
-import { ArrowLeftOutlined, CaretRightOutlined, DownOutlined, SaveOutlined, ThunderboltOutlined, UpOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, CaretRightOutlined, DownOutlined, RedoOutlined, SaveOutlined, ThunderboltOutlined, UndoOutlined, UpOutlined } from '@ant-design/icons';
 import { DragEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api, Dataset, Equipment, FlowKind, fmtTime, FramePayload, NodeRunStatus, NodeType } from '../api';
@@ -74,6 +74,47 @@ function Editor({ kind }: { kind: FlowKind }) {
   const [runningAll, setRunningAll] = useState(false);
   const wrapper = useRef<HTMLDivElement>(null);
 
+  // ---- 실행 취소/다시 실행: 짧은 시간(묶음) 안의 변경은 한 단계로 합치고, 드래그는 시작 시점 스냅샷을 씀 ----
+  type Snapshot = { nodes: OpNode[]; edges: Edge[] };
+  const [undoStack, setUndoStack] = useState<Snapshot[]>([]);
+  const [redoStack, setRedoStack] = useState<Snapshot[]>([]);
+  const lastCheckpoint = useRef(0);
+  const dragging = useRef(false);
+  const CHECKPOINT_GAP = 600;
+  const pushUndo = () => {
+    const now = Date.now();
+    if (now - lastCheckpoint.current > CHECKPOINT_GAP) {
+      const snap: Snapshot = { nodes: rf.getNodes() as OpNode[], edges: rf.getEdges() };
+      setUndoStack((s) => [...s.slice(-49), snap]);
+      setRedoStack([]);
+    }
+    lastCheckpoint.current = now;
+  };
+  const undo = () => {
+    if (!undoStack.length) return;
+    const prev = undoStack[undoStack.length - 1];
+    const cur: Snapshot = { nodes: rf.getNodes() as OpNode[], edges: rf.getEdges() };
+    setRedoStack((r) => [...r, cur]);
+    setUndoStack((s) => s.slice(0, -1));
+    setNodes(prev.nodes);
+    setEdges(prev.edges);
+    setSelectedId(null);
+    setDirty(true);
+    lastCheckpoint.current = 0;
+  };
+  const redo = () => {
+    if (!redoStack.length) return;
+    const next = redoStack[redoStack.length - 1];
+    const cur: Snapshot = { nodes: rf.getNodes() as OpNode[], edges: rf.getEdges() };
+    setUndoStack((s) => [...s, cur]);
+    setRedoStack((r) => r.slice(0, -1));
+    setNodes(next.nodes);
+    setEdges(next.edges);
+    setSelectedId(null);
+    setDirty(true);
+    lastCheckpoint.current = 0;
+  };
+
   const ntMap = useMemo(() => Object.fromEntries(nodeTypes.map((n) => [n.key, n])), [nodeTypes]);
   const { mode } = useTheme();
   useTrackRecent(meta ? { key: `${kind}:${id}`, label: meta.name, path: `/${kind}/${id}`, kind } : null);
@@ -89,6 +130,8 @@ function Editor({ kind }: { kind: FlowKind }) {
       setEdges((f.graph?.edges ?? []).map((e: any) => ({ ...e, markerEnd: { type: MarkerType.ArrowClosed } })));
       setTimeout(() => rf.fitView({ padding: 0.2 }), 50);
     });
+    setUndoStack([]);
+    setRedoStack([]);
   }, [id]);
 
   useEffect(() => {
@@ -124,11 +167,22 @@ function Editor({ kind }: { kind: FlowKind }) {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         save();
+        return;
+      }
+      const tag = (document.activeElement as HTMLElement | null)?.tagName;
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || (document.activeElement as HTMLElement | null)?.isContentEditable;
+      if (typing) return; // 텍스트 입력 중에는 브라우저 기본 되돌리기를 그대로 둠
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        undo();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) {
+        e.preventDefault();
+        redo();
       }
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [save]);
+  }, [save, undo, redo]);
 
   const ancestors = (target: string) => {
     const es = rf.getEdges();
@@ -183,6 +237,7 @@ function Editor({ kind }: { kind: FlowKind }) {
   const onConnect = useCallback(
     (c: Connection) => {
       if (c.source === c.target) return;
+      pushUndo();
       const target = rf.getNode(c.target!) as OpNode | undefined;
       const multi = target && inputHandles(target.data, ntMap).find((h) => h.id === c.targetHandle)?.multi;
       setEdges((es) =>
@@ -197,6 +252,7 @@ function Editor({ kind }: { kind: FlowKind }) {
   );
 
   const addNode = (k: OpKind, ntKey?: string, pos?: { x: number; y: number }) => {
+    pushUndo();
     const nt = ntKey ? ntMap[ntKey] : undefined;
     const params: Record<string, any> =
       k === 'source'
@@ -236,10 +292,12 @@ function Editor({ kind }: { kind: FlowKind }) {
   };
 
   const updateData = (nid: string, patch: Partial<OpData>) => {
+    pushUndo();
     setNodes((ns) => ns.map((n) => (n.id === nid ? { ...n, data: { ...n.data, ...patch } } : n)));
     markDirty();
   };
   const setParams = (nid: string, patch: Record<string, any>) => {
+    pushUndo();
     setNodes((ns) => ns.map((n) => (n.id === nid ? { ...n, data: { ...n.data, params: { ...n.data.params, ...patch } } } : n)));
     markDirty();
   };
@@ -314,6 +372,12 @@ function Editor({ kind }: { kind: FlowKind }) {
             setDirty(true);
           }}
         />
+        <Tooltip title="Undo (Ctrl+Z)">
+          <Button icon={<UndoOutlined />} onClick={undo} disabled={!undoStack.length} />
+        </Tooltip>
+        <Tooltip title="Redo (Ctrl+Y)">
+          <Button icon={<RedoOutlined />} onClick={redo} disabled={!redoStack.length} />
+        </Tooltip>
         <Button icon={<SaveOutlined />} onClick={save} disabled={!dirty}>
           Save
         </Button>
@@ -355,11 +419,16 @@ function Editor({ kind }: { kind: FlowKind }) {
             edges={edges}
             nodeTypes={nodeTypesMap}
             onNodesChange={(ch) => {
+              const dragStart = !dragging.current && ch.some((c) => c.type === 'position' && c.dragging === true);
+              const removed = ch.some((c) => c.type === 'remove');
+              if (dragStart || removed) pushUndo();
+              if (ch.some((c) => c.type === 'position')) dragging.current = ch.some((c) => c.type === 'position' && c.dragging === true);
               onNodesChange(ch);
-              if (ch.some((c) => c.type === 'remove' || (c.type === 'position' && c.dragging === false))) setDirty(true);
-              if (ch.some((c) => c.type === 'remove')) setSelectedId(null);
+              if (removed || ch.some((c) => c.type === 'position' && c.dragging === false)) setDirty(true);
+              if (removed) setSelectedId(null);
             }}
             onEdgesChange={(ch) => {
+              if (ch.some((c) => c.type === 'remove')) pushUndo();
               onEdgesChange(ch);
               if (ch.some((c) => c.type === 'remove')) markDirty();
             }}
@@ -386,6 +455,7 @@ function Editor({ kind }: { kind: FlowKind }) {
               inputCols={inputCols}
               onRun={() => runTo(selected.id)}
               onDelete={() => {
+                pushUndo();
                 setNodes((ns) => ns.filter((n) => n.id !== selected.id));
                 setEdges((es) => es.filter((e) => e.source !== selected.id && e.target !== selected.id));
                 setSelectedId(null);
@@ -519,7 +589,7 @@ function FlowInfo({ meta, kind, onChange }: { meta: Meta; kind: FlowKind; onChan
         </ol>
       )}
       <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
-        Shortcuts: Ctrl+S save · Delete removes selection · select a node and ‘Run to here’ to check intermediate results
+        Shortcuts: Ctrl+S save · Ctrl+Z undo · Ctrl+Y (or Ctrl+Shift+Z) redo · Delete removes selection · select a node and ‘Run to here’ to check intermediate results
       </Typography.Paragraph>
     </div>
   );

@@ -459,15 +459,16 @@ function normalPdf(x: number, mean: number, sd: number) {
 function capability(all: number[], lim: NonNullable<ChartConfig['limits']>) {
   const n = all.length;
   const mean = all.reduce((a, b) => a + b, 0) / n;
-  const sd = Math.sqrt(all.reduce((a, b) => a + (b - mean) ** 2, 0) / n) || 1e-9;
+  const sd = Math.sqrt(all.reduce((a, b) => a + (b - mean) ** 2, 0) / n);
+  const oob = all.filter((v) => (lim.lsl != null && v < lim.lsl) || (lim.usl != null && v > lim.usl)).length;
+  const common = { mean, sd, n, oobPct: (oob / n) * 100 };
+  // 데이터에 편차가 거의 없으면(표준편차≈0) 나누기로 의미 없이 큰 값이 나오는 대신 "계산 불가"로 표시
+  if (n < 2 || sd < 1e-9) return { ...common, cpk: null, cp: null, noVariance: true };
   const cpu = lim.usl != null ? (lim.usl - mean) / (3 * sd) : undefined;
   const cpl = lim.lsl != null ? (mean - lim.lsl) / (3 * sd) : undefined;
-  const sides = [cpu, cpl].filter((v): v is number => v !== undefined);
-  if (!sides.length) return null;
-  const cpk = Math.min(...sides);
-  const cp = lim.usl != null && lim.lsl != null ? (lim.usl - lim.lsl) / (6 * sd) : undefined;
-  const oob = all.filter((v) => (lim.lsl != null && v < lim.lsl) || (lim.usl != null && v > lim.usl)).length;
-  return { mean, sd, cpu, cpl, cpk, cp, oobPct: (oob / n) * 100, n };
+  const cpk = Math.min(...[cpu, cpl].filter((v): v is number => v !== undefined));
+  const cp = lim.usl != null && lim.lsl != null ? (lim.usl - lim.lsl) / (6 * sd) : null;
+  return { ...common, cpk, cp, noVariance: false };
 }
 
 function histogram(cfg: ChartConfig, d: FramePayload, size?: ChartSize) {
@@ -491,7 +492,7 @@ function histogram(cfg: ChartConfig, d: FramePayload, size?: ChartSize) {
 
   const lim = cfg.limits;
   const cap = lim && (lim.lsl != null || lim.usl != null) ? capability(all, lim) : null;
-  if (cap) {
+  if (cap && !cap.noVariance) {
     // 전체(그룹 구분 없이) 평균/표준편차를 따르는 정규분포 참고선 — 막대 수와 같은 척도(개수)로 스케일
     out.push({
       name: 'Normal fit',
@@ -527,8 +528,14 @@ function histogram(cfg: ChartConfig, d: FramePayload, size?: ChartSize) {
         { type: 'text', silent: true, position: [x + 4, top + 2], style: { text: key.toUpperCase(), fill: T.series[1], fontSize: 11, fontWeight: 600 } },
       );
     });
-    const bad = (cap.cpk ?? 2) < 1;
-    const parts = [cap.cpk !== undefined ? `Cpk ${cap.cpk.toFixed(2)}` : '', cap.cp !== undefined ? `Cp ${cap.cp.toFixed(2)}` : '', `μ ${round(cap.mean)}`, `σ ${round(cap.sd)}`, `Out of spec ${cap.oobPct.toFixed(1)}% (n=${cap.n})`];
+    const bad = cap.cpk != null && cap.cpk < 1;
+    const parts = [
+      cap.noVariance ? 'Cpk N/A (no variation)' : cap.cpk != null ? `Cpk ${cap.cpk.toFixed(2)}` : '',
+      cap.cp != null ? `Cp ${cap.cp.toFixed(2)}` : '',
+      `μ ${round(cap.mean)}`,
+      `σ ${round(cap.sd)}`,
+      `Out of spec ${cap.oobPct.toFixed(1)}% (n=${cap.n})`,
+    ];
     graphic.push({
       type: 'text',
       silent: true,

@@ -129,6 +129,7 @@ export default function WidgetView({
   selection,
   onSelect,
   params,
+  liveParamIds,
   onParamChange,
   onEdit,
   onDelete,
@@ -140,6 +141,8 @@ export default function WidgetView({
   selection: Selection | null;
   onSelect: (s: Selection | null) => void;
   params: Params;
+  /** 지금 대시보드에 실제로 있는 컨트롤 위젯들의 paramId — 이 위젯이 참조하는 파라미터가 없어졌는지 확인용 */
+  liveParamIds: string[];
   onParamChange: (paramId: string, value: string) => void;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -149,6 +152,8 @@ export default function WidgetView({
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState('');
   const [bodyRef, size] = useSize<HTMLDivElement>();
+  // 이 위젯이 쓰는 파라미터 중, 그걸 정해줄 컨트롤 위젯이 더는 없는 것 (지워졌거나 이름이 바뀜)
+  const missingParams = useMemo(() => widgetParamIds(wRaw).filter((id) => !liveParamIds.includes(id)), [wRaw, liveParamIds]);
   // 파라미터 토큰($metric 등)을 현재 컨트롤 값으로 바꾼 위젯. 편집은 항상 wRaw(토큰 그대로)를 쓴다.
   const w = useMemo(() => resolveWidgetParams(wRaw, params), [wRaw, params]);
   const limit = w.limit ?? (w.type === 'table' ? 5000 : w.type === 'stat' ? 0 : 50000);
@@ -157,7 +162,7 @@ export default function WidgetView({
 
   // 데이터셋별 요청 (선택 연동 컬럼은 데이터셋마다 다를 수 있음)
   const reqs: Req[] = useMemo(() => {
-    if (w.type === 'text' || w.type === 'control') return [];
+    if (w.type === 'text' || w.type === 'control' || missingParams.length) return [];
     const need = neededColumns(w);
     return widgetSources(w).map((s) => {
       const meta = datasets.find((d) => d.name === s.dataset);
@@ -173,7 +178,7 @@ export default function WidgetView({
       }
       return { ...s, url: `/api/datasets/${encodeURIComponent(s.dataset)}/data?${qs}`, linkCol, highlight };
     });
-  }, [w, datasets, selection, isSource, behavior, limit]);
+  }, [w, datasets, selection, isSource, behavior, limit, missingParams]);
   const reqKey = JSON.stringify(reqs.map((r) => [r.url, r.label, r.map, r.highlight && selection?.values]));
   const linked = reqs.some((r) => r.linkCol);
 
@@ -283,6 +288,12 @@ export default function WidgetView({
     }
   } else if (!w.dataset) {
     body = <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Choose a dataset" />;
+  } else if (missingParams.length) {
+    body = (
+      <Typography.Text type="warning" style={{ fontSize: 12 }}>
+        Parameter {missingParams.map((p) => `⚙ ${p}`).join(', ')} has no control widget — add one, or edit this widget to pick a column
+      </Typography.Text>
+    );
   } else if (err) {
     body = <Typography.Text type="danger" style={{ fontSize: 12 }}>{err}</Typography.Text>;
   } else if (!data) {

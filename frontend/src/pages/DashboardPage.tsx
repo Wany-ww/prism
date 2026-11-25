@@ -1,7 +1,7 @@
 import { App, Button, Input, Select, Space, Tag, Typography } from 'antd';
 import { AimOutlined, ArrowLeftOutlined, CloseOutlined, EditOutlined, ExpandOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from '@ant-design/icons';
 import GridLayout, { Layout, WidthProvider } from 'react-grid-layout';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, Dataset } from '../api';
 import WidgetView, { Widget } from '../dashboard/Widget';
@@ -28,6 +28,8 @@ export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) 
   const [selection, setSelection] = useState<Selection | null>(null);
   // 드롭다운/슬라이더 컨트롤 위젯이 정한 값 — paramId → 현재 컬럼명. 새 컨트롤 위젯은 첫 항목으로 시작
   const [params, setParams] = useState<Params>({});
+  // 지금 이 대시보드에 실제로 있는 컨트롤 위젯들의 paramId — 다른 위젯이 참조하는 파라미터가 없어졌는지 확인할 때 씀
+  const controlParamIds = useMemo(() => [...new Set(widgets.filter((w) => w.type === 'control' && w.control?.paramId).map((w) => w.control!.paramId!))], [widgets]);
   useEffect(() => {
     setParams((cur) => {
       let next: Params | null = null;
@@ -173,6 +175,7 @@ export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) 
                 selection={selection}
                 onSelect={setSelection}
                 params={params}
+                liveParamIds={controlParamIds}
                 onParamChange={(id, v) => setParams((p) => ({ ...p, [id]: v }))}
                 onEdit={() => setEditW(w)}
                 onDelete={() => {
@@ -189,7 +192,7 @@ export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) 
         <WidgetEditor
           value={editW}
           datasets={datasets}
-          paramIds={[...new Set(widgets.filter((x) => x.type === 'control' && x.control?.paramId).map((x) => x.control!.paramId!))]}
+          paramIds={widgets.filter((x) => x.type === 'control' && x.control?.paramId && x.i !== editW.i).map((x) => x.control!.paramId!)}
           onCancel={() => setEditW(null)}
           onOk={(nw) => {
             setWidgets((ws) => (ws.some((x) => x.i === nw.i) ? ws.map((x) => (x.i === nw.i ? nw : x)) : [...ws, nw]));

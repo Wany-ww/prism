@@ -29,7 +29,8 @@ export default function WidgetEditor({
 }: {
   value: Widget;
   datasets: Dataset[];
-  /** 대시보드에 이미 있는 컨트롤 위젯들의 paramId — 차트 등에서 "⚙ 파라미터"로 고를 수 있게 함 */
+  /** 지금 편집 중인 위젯을 뺀, 대시보드의 다른 컨트롤 위젯들의 paramId — 차트 등에서 "⚙ 파라미터"로 고를 수 있게 하고,
+   * 이 위젯 자신이 컨트롤이면 같은 이름이 이미 쓰이고 있는지 확인하는 데도 씀 */
   paramIds: string[];
   onOk: (w: Widget) => void;
   onCancel: () => void;
@@ -37,7 +38,7 @@ export default function WidgetEditor({
   const [w, setW] = useState<Widget>(value);
   const ds = datasets.find((d) => d.name === w.dataset);
   const colsOf = (name?: string) => (datasets.find((d) => d.name === name)?.columns ?? []).map((c) => ({ value: c.name, label: `${c.name}  ·  ${c.dtype}` }));
-  const paramOpts = paramIds.map((id) => ({ value: paramToken(id), label: `⚙ ${id}` }));
+  const paramOpts = [...new Set(paramIds)].map((id) => ({ value: paramToken(id), label: `⚙ ${id}` }));
   /** 컬럼 목록에 "⚙ 파라미터" 선택지를 더함 (컨트롤 위젯이 있을 때만) */
   const withParams = (base: DefaultOptionType[]): DefaultOptionType[] => (paramOpts.length ? [{ label: 'Columns', options: base }, { label: 'Parameters', options: paramOpts }] : base);
   const rawCols = colsOf(w.dataset);
@@ -64,6 +65,10 @@ export default function WidgetEditor({
   const setLimits = (p: Partial<typeof limits>) => setChart({ limits: { ...limits, ...p } });
   const ctrlOptions = w.control?.options ?? [];
   const setControlOptions = (options: ControlOption[]) => setW({ ...w, control: { ...w.control, options } });
+  const paramId = (w.control?.paramId ?? '').trim();
+  const paramIdBad = !!paramId && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(paramId);
+  // paramIds 는 '다른' 컨트롤 위젯들의 이름이라, 여기 있으면 곧 이름이 겹친다는 뜻
+  const paramIdDup = !!paramId && !paramIdBad && paramIds.includes(paramId);
 
   return (
     <Modal open width={760} title="Widget settings" onOk={() => onOk(w)} onCancel={onCancel} okText="Apply" destroyOnClose styles={{ body: { maxHeight: '72vh', overflowY: 'auto', paddingRight: 8 } }}>
@@ -421,7 +426,18 @@ export default function WidgetEditor({
                 </Form.Item>
               </Col>
               <Col span={14}>
-                <Form.Item label="Parameter name" extra="다른 위젯에서 이 이름(⚙)으로 골라 이 컨트롤에 연결합니다. 예: metric">
+                <Form.Item
+                  label="Parameter name"
+                  validateStatus={paramIdBad ? 'error' : paramIdDup ? 'warning' : undefined}
+                  help={
+                    paramIdBad
+                      ? '영문/숫자/밑줄만 쓰고 글자로 시작하세요 (공백·$ 사용 불가)'
+                      : paramIdDup
+                        ? `다른 컨트롤 위젯이 이미 '${paramId}' 를 쓰고 있어요 — 둘이 같은 값을 공유하게 돼요. 다른 이름을 쓰세요`
+                        : undefined
+                  }
+                  extra={!paramIdBad && !paramIdDup ? '다른 위젯에서 이 이름(⚙)으로 골라 이 컨트롤에 연결합니다. 예: metric' : undefined}
+                >
                   <Input value={w.control?.paramId ?? ''} placeholder="metric" onChange={(e) => setW({ ...w, control: { ...w.control, paramId: e.target.value.trim() } })} />
                 </Form.Item>
               </Col>
