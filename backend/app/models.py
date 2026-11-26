@@ -164,6 +164,7 @@ class Dashboard(Base):
     __tablename__ = "dashboards"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
+    slug: Mapped[str] = mapped_column(String(64), default="")
     description: Mapped[str] = mapped_column(Text, default="")
     layout: Mapped[dict] = mapped_column(JSONType, default=dict)
     refresh_sec: Mapped[int] = mapped_column(Integer, default=0)

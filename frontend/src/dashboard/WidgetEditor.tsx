@@ -74,12 +74,14 @@ export default function WidgetEditor({
     <Modal open width={760} title="Widget settings" onOk={() => onOk(w)} onCancel={onCancel} okText="Apply" destroyOnClose styles={{ body: { maxHeight: '72vh', overflowY: 'auto', paddingRight: 8 } }}>
       <Form layout="vertical" size="middle">
         <Row gutter={12}>
-          <Col span={14}>
+          <Col span={24}>
             <Form.Item label="Title">
               <Input value={w.title} onChange={(e) => setW({ ...w, title: e.target.value })} />
             </Form.Item>
           </Col>
-          <Col span={10}>
+        </Row>
+        <Row gutter={12}>
+          <Col span={24}>
             <Form.Item label="Type">
               <Radio.Group
                 value={w.type}

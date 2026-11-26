@@ -1,5 +1,6 @@
 import io
 import json
+import re
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -115,9 +116,47 @@ def trace_search(dataset: str, q: str, column: str = "", mode: str = "exact", li
 
 # ---------- Dashboards ----------
 
+_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+def _slugify(name: str) -> str:
+    base = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+    return base or "dashboard"
+
+
+def _unique_slug(db: Session, base: str, exclude_id: int | None = None) -> str:
+    """base 가 이미 쓰이고 있으면 -2, -3 ... 을 붙여 비어있는 식별자를 찾음."""
+    slug, n = base, 2
+    while True:
+        q = select(Dashboard.id).where(Dashboard.slug == slug)
+        if exclude_id is not None:
+            q = q.where(Dashboard.id != exclude_id)
+        if db.scalar(q) is None:
+            return slug
+        slug = f"{base}-{n}"
+        n += 1
+
+
+def _resolve_slug(db: Session, requested: str, name: str, *, current: str = "", exclude_id: int | None = None) -> str:
+    """요청받은 식별자를 검증하거나(형식/중복), 비어 있으면 이름에서 자동 생성. current 는 수정 시 기존 값 유지용."""
+    requested = requested.strip().lower()
+    if requested:
+        if not _SLUG_RE.match(requested):
+            raise HTTPException(400, "식별자는 소문자, 숫자, 하이픈(-)만 사용할 수 있습니다.")
+        q = select(Dashboard.id).where(Dashboard.slug == requested)
+        if exclude_id is not None:
+            q = q.where(Dashboard.id != exclude_id)
+        if db.scalar(q) is not None:
+            raise HTTPException(400, f"식별자 [{requested}] 는 이미 사용 중입니다.")
+        return requested
+    if current:
+        return current
+    return _unique_slug(db, _slugify(name), exclude_id=exclude_id)
+
 
 class DashboardIn(BaseModel):
     name: str
+    slug: str = ""
     description: str = ""
     layout: dict = Field(default_factory=lambda: {"widgets": []})
     refresh_sec: int = 0
@@ -133,6 +172,17 @@ def list_dashboards(db: Session = Depends(get_db)):
     return out
 
 
+@router.get("/dashboards/lookup/{key}")
+def lookup_dashboard(key: str, db: Session = Depends(get_db)):
+    """숫자면 id로, 아니면 slug(식별자)로 대시보드를 찾음 — 풀스크린 주소(/view/<id 또는 식별자>)가 쓰는 엔드포인트."""
+    d = db.get(Dashboard, int(key)) if key.isdigit() else None
+    if d is None:
+        d = db.scalar(select(Dashboard).where(Dashboard.slug == key))
+    if d is None:
+        raise HTTPException(404, f"Dashboard [{key}] not found")
+    return row_dict(d)
+
+
 @router.get("/dashboards/{did}")
 def get_dashboard(did: int, db: Session = Depends(get_db)):
     return row_dict(get_or_404(db, Dashboard, did))
@@ -140,7 +190,9 @@ def get_dashboard(did: int, db: Session = Depends(get_db)):
 
 @router.post("/dashboards")
 def create_dashboard(body: DashboardIn, db: Session = Depends(get_db)):
-    d = Dashboard(**body.model_dump())
+    data = body.model_dump()
+    slug = _resolve_slug(db, data.pop("slug"), data["name"])
+    d = Dashboard(**data, slug=slug)
     db.add(d)
     db.commit()
     return row_dict(d)
@@ -149,7 +201,9 @@ def create_dashboard(body: DashboardIn, db: Session = Depends(get_db)):
 @router.put("/dashboards/{did}")
 def update_dashboard(did: int, body: DashboardIn, db: Session = Depends(get_db)):
     d = get_or_404(db, Dashboard, did)
-    for k, v in body.model_dump().items():
+    data = body.model_dump()
+    data["slug"] = _resolve_slug(db, data.pop("slug"), data["name"], current=d.slug, exclude_id=did)
+    for k, v in data.items():
         setattr(d, k, v)
     db.commit()
     return row_dict(d)
@@ -185,7 +239,8 @@ def import_dashboard(body: dict, db: Session = Depends(get_db)):
     name = str(body.get("name") or "Imported dashboard").strip() or "Imported dashboard"
     layout = body.get("layout") if isinstance(body.get("layout"), dict) else {"widgets": []}
     refresh_sec = body.get("refresh_sec") if isinstance(body.get("refresh_sec"), int) else 0
-    d = Dashboard(name=f"{name} (imported)", description=str(body.get("description") or ""), layout=layout, refresh_sec=refresh_sec)
+    slug = _unique_slug(db, _slugify(name))
+    d = Dashboard(name=f"{name} (imported)", slug=slug, description=str(body.get("description") or ""), layout=layout, refresh_sec=refresh_sec)
     db.add(d)
     db.commit()
     return row_dict(d)

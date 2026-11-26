@@ -49,14 +49,15 @@ export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) 
   }, [editW]);
 
   useEffect(() => {
-    api.get(`/api/dashboards/${id}`).then((d) => {
+    // lookup: 숫자 id, 식별자(slug) 둘 다 받아줌 — 풀스크린 주소(/view/<식별자>)가 이 경로를 씀
+    api.get(`/api/dashboards/lookup/${id}`).then((d) => {
       setDash(d);
       setWidgets(d.layout?.widgets ?? []);
     });
     api.get<Dataset[]>('/api/datasets').then(setDatasets);
   }, [id]);
 
-  useTrackRecent(dash && !fullscreen ? { key: `dashboard:${id}`, label: dash.name, path: `/dashboards/${id}`, kind: 'dashboard' } : null);
+  useTrackRecent(dash && !fullscreen ? { key: `dashboard:${dash.id}`, label: dash.name, path: `/dashboards/${dash.id}`, kind: 'dashboard' } : null);
 
   useEffect(() => {
     if (!dash?.refresh_sec || editing) return;
@@ -65,10 +66,14 @@ export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) 
   }, [dash?.refresh_sec, editing]);
 
   const save = async () => {
-    const d = await api.put(`/api/dashboards/${id}`, { name: dash.name, description: dash.description, refresh_sec: dash.refresh_sec, layout: { widgets } });
-    setDash(d);
-    setDirty(false);
-    message.success('Saved.');
+    try {
+      const d = await api.put(`/api/dashboards/${dash.id}`, { name: dash.name, slug: dash.slug, description: dash.description, refresh_sec: dash.refresh_sec, layout: { widgets } });
+      setDash(d);
+      setDirty(false);
+      message.success('Saved.');
+    } catch (e: any) {
+      message.error(e?.message || 'Could not save.');
+    }
   };
 
   const onLayout = (l: Layout[]) => {
@@ -91,16 +96,45 @@ export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) 
   return (
     <div style={{ padding: fullscreen ? 16 : '20px 24px 40px', minHeight: fullscreen ? '100vh' : undefined, background: 'var(--bg-sub)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
-        <Space>
-          {!fullscreen && <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => nav('/dashboards')} />}
-          {editing ? (
-            <Input value={dash.name} onChange={(e) => { setDash({ ...dash, name: e.target.value }); setDirty(true); }} style={{ fontSize: 20, fontWeight: 700, width: 360 }} />
-          ) : (
-            <Typography.Title level={3} style={{ margin: 0, fontWeight: 700 }}>
-              {dash.name}
-            </Typography.Title>
-          )}
-          {dirty && <Tag color="orange">Unsaved</Tag>}
+        <Space direction="vertical" size={2} style={{ alignItems: 'flex-start' }}>
+          <Space>
+            {!fullscreen && <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => nav('/dashboards')} />}
+            {editing ? (
+              <Input value={dash.name} onChange={(e) => { setDash({ ...dash, name: e.target.value }); setDirty(true); }} style={{ fontSize: 20, fontWeight: 700, width: 360 }} />
+            ) : (
+              <Typography.Title level={3} style={{ margin: 0, fontWeight: 700 }}>
+                {dash.name}
+              </Typography.Title>
+            )}
+            {dirty && <Tag color="orange">Unsaved</Tag>}
+          </Space>
+          {!fullscreen &&
+            (editing ? (
+              <Space size={6} style={{ marginLeft: 40 }}>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  Full screen URL · /view/
+                </Typography.Text>
+                <Input
+                  size="small"
+                  style={{ width: 200 }}
+                  value={dash.slug}
+                  placeholder={String(dash.id)}
+                  onChange={(e) => {
+                    const v = e.target.value.toLowerCase().replace(/[^a-z0-9-]+/g, '-');
+                    setDash({ ...dash, slug: v });
+                    setDirty(true);
+                  }}
+                />
+              </Space>
+            ) : (
+              <Typography.Text
+                type="secondary"
+                style={{ fontSize: 12, marginLeft: 40 }}
+                copyable={{ text: `${window.location.origin}/view/${dash.slug || dash.id}` }}
+              >
+                /view/{dash.slug || dash.id}
+              </Typography.Text>
+            ))}
         </Space>
         <Space>
           <Select
@@ -116,7 +150,7 @@ export default function DashboardPage({ fullscreen }: { fullscreen?: boolean }) 
           <Button icon={<ReloadOutlined />} onClick={() => setTick((t) => t + 1)} />
           {!fullscreen && (
             <>
-              <Button icon={<ExpandOutlined />} onClick={() => window.open(`/view/${id}`, '_blank')}>
+              <Button icon={<ExpandOutlined />} onClick={() => window.open(`/view/${dash.slug || dash.id}`, '_blank')}>
                 Full screen
               </Button>
               {editing && (
