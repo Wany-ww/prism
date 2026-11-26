@@ -1,8 +1,8 @@
 import { Handle, NodeProps, Position } from '@xyflow/react';
-import { Spin } from 'antd';
-import { CheckCircleFilled, CloseCircleFilled, MinusCircleFilled } from '@ant-design/icons';
+import { MinusCircleFilled } from '@ant-design/icons';
 import { memo } from 'react';
 import { inputHandles, kindName, nodeColor, OpNode, useFlowCtx } from './defs';
+import { CheckIcon, iconKindOf, KindIcon, XIcon } from './icons';
 
 function summary(d: OpNode['data'], ctx: ReturnType<typeof useFlowCtx>): string[] {
   const p = d.params ?? {};
@@ -54,8 +54,9 @@ function OpNodeView({ id, data, selected }: NodeProps<OpNode>) {
   const st = ctx.status[id];
   const running = ctx.running[id];
   const color = nodeColor(data, ctx.nodeTypes);
+  const bodyIndent = ins.some((h) => h.label) ? 48 : 14;
   return (
-    <div className={`op-node ${selected ? 'selected' : ''} ${data.disabled ? 'disabled' : ''}`} style={{ ['--c' as any]: color }}>
+    <div className={`op-card ${selected ? 'selected' : ''} ${data.disabled ? 'disabled' : ''}`} style={{ ['--c' as any]: color }}>
       {ins.map((h, i) => {
         const top = `${((i + 1) / (ins.length + 1)) * 100}%`;
         return (
@@ -69,31 +70,40 @@ function OpNodeView({ id, data, selected }: NodeProps<OpNode>) {
           </div>
         );
       })}
-      <div className="op-head">
-        <span>{data.label}</span>
-        <span>
-          {running ? (
-            <Spin size="small" />
-          ) : st?.status === 'ok' ? (
-            <CheckCircleFilled style={{ color: 'var(--green)' }} />
-          ) : st?.status === 'error' ? (
-            <CloseCircleFilled style={{ color: 'var(--red)' }} />
-          ) : st?.status === 'skipped' ? (
-            <MinusCircleFilled style={{ color: 'var(--text-4)' }} />
-          ) : null}
-        </span>
+      <div className="ohead">
+        <div className="oicon">
+          <KindIcon kind={iconKindOf(data.kind)} />
+        </div>
+        <div className="otitle">
+          <b>{data.label}</b>
+          <span>{kindName(data, ctx.nodeTypes)}</span>
+        </div>
+        {running ? (
+          <span className="chip run">
+            <i className="spin" />
+            Running
+          </span>
+        ) : st?.status === 'ok' ? (
+          <span className="chip ok">
+            <CheckIcon />
+            OK
+          </span>
+        ) : st?.status === 'error' ? (
+          <span className="chip err">
+            <XIcon />
+            Error
+          </span>
+        ) : st?.status === 'skipped' ? (
+          <MinusCircleFilled style={{ color: 'var(--text-4)' }} />
+        ) : null}
       </div>
-      <div className="op-kind" style={{ paddingLeft: ins.some((h) => h.label) ? 48 : 12 }}>
-        <i />
-        {kindName(data, ctx.nodeTypes)}
-      </div>
-      <div className="op-body" style={{ paddingLeft: ins.some((h) => h.label) ? 48 : 12 }}>
+      <div className="obody" style={{ paddingLeft: bodyIndent }}>
         {summary(data, ctx).map((s, i) => (
           <div key={i}>{s}</div>
         ))}
       </div>
       {st && (
-        <div className="op-status" style={{ color: st.status === 'error' ? 'var(--red)' : 'var(--text-2)' }}>
+        <div className={`ofoot ${st.status === 'error' ? 'err' : ''}`}>
           {st.status === 'error'
             ? (st.error ?? '').slice(0, 80)
             : st.status === 'skipped'

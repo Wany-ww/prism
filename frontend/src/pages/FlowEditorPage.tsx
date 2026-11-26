@@ -20,6 +20,7 @@ import { api, Dataset, Equipment, FlowKind, fmtTime, FramePayload, NodeRunStatus
 import DataGrid from '../components/DataGrid';
 import StatusTag from '../components/StatusTag';
 import { BUILTINS, FlowContext, inputHandles, nodeColor, OpData, OpKind, OpNode } from '../flow/defs';
+import { iconKindOf, KindIcon } from '../flow/icons';
 import NodeConfig from '../flow/NodeConfig';
 import OpNodeView from '../flow/OpNodeView';
 import { useTrackRecent } from '../recent';
@@ -396,16 +397,17 @@ function Editor({ kind }: { kind: FlowKind }) {
               {g.items.map((it) => (
                 <div
                   key={it.nodeType ?? it.kind}
-                  className="palette-item"
-                  style={{ ['--c' as any]: it.color }}
+                  className="palette-card"
                   draggable
                   onDragStart={(e) => e.dataTransfer.setData('application/prism', JSON.stringify({ kind: it.kind, nodeType: it.nodeType }))}
                   onClick={() => addNode(it.kind, it.nodeType)}
                   title={it.desc}
                 >
-                  <i />
-                  <div>
-                    {it.name}
+                  <div className="pal-icon" style={{ ['--c' as any]: it.color }}>
+                    <KindIcon kind={iconKindOf(it.kind)} />
+                  </div>
+                  <div className="ptxt">
+                    <b>{it.name}</b>
                     <small>{it.desc}</small>
                   </div>
                 </div>
