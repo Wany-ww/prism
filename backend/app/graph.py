@@ -9,6 +9,7 @@
   (:PrismGraph {graph, product_key, resources, updated_at})  그래프 메타
 """
 
+import hashlib
 import math
 import re
 import threading
@@ -100,7 +101,8 @@ def status() -> dict:
 
 
 def _clean(v):
-    if v is None:
+    # NaT 는 datetime 의 하위 타입이라 아래 isinstance 보다 먼저 걸러야 함
+    if v is None or v is pd.NaT or v is pd.NA:
         return None
     if isinstance(v, (np.bool_, bool)):
         return bool(v)
@@ -142,7 +144,15 @@ def parse_resources(spec: str | list) -> list[tuple[str, str]]:
     return out
 
 
-def build_products(df: pd.DataFrame, product_key: str, resources: list[tuple[str, str]]) -> list[dict]:
+def parse_fields(spec: str | list) -> list[str]:
+    """Step 속성으로 저장할 필드: 'stage.field'(그 컬럼만) 또는 'field'(모든 공정의 같은 필드). 줄/쉼표 구분."""
+    items = spec if isinstance(spec, list) else re.split(r"[\n,]", spec or "")
+    return [s.strip() for s in items if str(s).strip()]
+
+
+def build_products(df: pd.DataFrame, product_key: str, resources: list[tuple[str, str]], fields: list[str] | None = None) -> list[dict]:
+    """제품별 공정 이력. Step 속성은 판정 필드(judge/result/…)와 fields 로 지정한 것만 넣는다
+    (수천 개 컬럼을 모두 그래프에 넣으면 적재가 몇 시간씩 걸리고, 그래프 질의에는 쓰이지 않음)."""
     cols = [str(c) for c in df.columns]
     stages: list[str] = []
     for c in cols:
@@ -152,36 +162,51 @@ def build_products(df: pd.DataFrame, product_key: str, resources: list[tuple[str
                 stages.append(st)
     if not stages:
         raise GraphError("Needs a Match result with step prefixes (alias.column).")
-    stage_cols = {st: [c for c in cols if c.startswith(st + ".")] for st in stages}
-    records = df.to_dict("records")
-    products = []
+    wanted = set(fields or [])
+    stage_all = {st: [c for c in cols if c.startswith(st + ".")] for st in stages}
+    stage_props = {
+        st: [(c, c.split(".", 1)[1]) for c in stage_all[st] if c.split(".", 1)[1] not in ("_ts", "_equipment")
+             and (OUTCOME_RE.search(c.split(".", 1)[1]) or c in wanted or c.split(".", 1)[1] in wanted)]
+        for st in stages
+    }
+    # 이 공정에 도달했는지: 그 공정 컬럼 중 하나라도 값이 있으면 (컬럼별로 벡터 연산)
+    reached = {st: df[stage_all[st]].notna().any(axis=1).to_numpy() for st in stages}
+    needed = [product_key] if product_key else []
+    for st in stages:
+        needed += [c for c in (f"{st}._ts", f"{st}._equipment") if c in df.columns] + [c for c, _ in stage_props[st]]
+    needed += [c for c, _ in resources]
+    records = df[list(dict.fromkeys(needed))].to_dict("records")
+    products, seen = [], {}
     for i, row in enumerate(records):
         steps = []
         for order, st in enumerate(stages):
+            if not reached[st][i]:
+                continue  # 이 공정에 도달하지 않은 제품
             props = {}
-            for c in stage_cols[st]:
-                field = c.split(".", 1)[1]
-                if field in ("_ts", "_equipment"):
-                    continue
+            for c, field in stage_props[st]:
                 v = _clean(row.get(c))
                 if v is not None:
                     props[field] = v
-            ts = _clean(row.get(f"{st}._ts"))
-            eq = _key_text(row.get(f"{st}._equipment"))
-            if ts is None and eq is None and not props:
-                continue  # 이 공정에 도달하지 않은 제품
             res = []
             for col, kind in resources:
                 if col.startswith(st + "."):
                     val = _key_text(row.get(col))
                     if val is not None:
                         res.append({"kind": kind, "value": val})
-            steps.append({"stage": st, "order": order, "ts": ts, "equipment": eq, "props": props, "resources": res})
+            steps.append({"stage": st, "order": order, "ts": _clean(row.get(f"{st}._ts")), "equipment": _key_text(row.get(f"{st}._equipment")), "props": props, "resources": res})
         if not steps:
             continue
         pid = _key_text(row.get(product_key)) if product_key else None
-        label = pid or f"unkeyed · {steps[0]['stage']} {steps[0]['ts'] or ''}".strip()
-        products.append({"id": pid or f"row-{i + 1}", "keyed": pid is not None, "label": label, "steps": steps})
+        first = steps[0]
+        label = pid or f"unkeyed · {first['stage']} {first['ts'] or ''}".strip()
+        if pid is None:
+            # 키가 없는 제품도 다시 실행했을 때 같은 id 가 되도록 첫 공정 정보로 만든다 (증분 적재용)
+            base = hashlib.sha1(f"{first['stage']}|{first['ts']}|{first['equipment']}".encode()).hexdigest()[:12]
+            seen[base] = seen.get(base, 0) + 1
+            pid_out = f"row-{base}" + (f"-{seen[base]}" if seen[base] > 1 else "")
+        else:
+            pid_out = pid
+        products.append({"id": pid_out, "keyed": pid is not None, "label": label, "steps": steps})
     return products
 
 
@@ -193,65 +218,89 @@ _SCHEMA = [
     "CREATE INDEX prism_meta IF NOT EXISTS FOR (n:PrismGraph) ON (n.graph)",
 ]
 
+# 제품 1개 = Product + 공정 Step 들 + 공정 순서(NEXT). NEXT 도 같은 배치 안에서 만들어
+# 그래프 전체를 한 트랜잭션으로 훑는 후처리가 없다.
 _INSERT = """
 UNWIND $rows AS r
 CREATE (p:Product {graph: $g, id: r.id, keyed: r.keyed, label: r.label})
 WITH p, r
-UNWIND r.steps AS st
-CREATE (s:Step)
-SET s += st.props
-SET s.graph = $g, s.product = r.id, s.stage = st.stage, s.order = st.order, s.ts = st.ts, s.equipment = st.equipment
-CREATE (p)-[:PASSED {order: st.order}]->(s)
-FOREACH (_ IN CASE WHEN st.equipment IS NULL THEN [] ELSE [1] END |
-  MERGE (e:Equipment {graph: $g, name: st.equipment})
-  CREATE (s)-[:ON]->(e))
-FOREACH (rs IN st.resources |
-  MERGE (x:Resource {graph: $g, kind: rs.kind, value: rs.value})
-  CREATE (s)-[:USES]->(x))
-"""
-
-_LINK_NEXT = """
-MATCH (p:Product {graph: $g})-[:PASSED]->(s:Step)
-WITH p, s ORDER BY s.order
-WITH p, collect(s) AS ss
+CALL {
+  WITH p, r
+  UNWIND r.steps AS st
+  CREATE (s:Step)
+  SET s += st.props
+  SET s.graph = $g, s.product = r.id, s.stage = st.stage, s.order = st.order, s.ts = st.ts, s.equipment = st.equipment
+  CREATE (p)-[:PASSED {order: st.order}]->(s)
+  FOREACH (_ IN CASE WHEN st.equipment IS NULL THEN [] ELSE [1] END |
+    MERGE (e:Equipment {graph: $g, name: st.equipment})
+    CREATE (s)-[:ON]->(e))
+  FOREACH (rs IN st.resources |
+    MERGE (x:Resource {graph: $g, kind: rs.kind, value: rs.value})
+    CREATE (s)-[:USES]->(x))
+  RETURN collect(s) AS ss
+}
 FOREACH (i IN range(0, size(ss) - 2) |
   FOREACH (a IN [ss[i]] | FOREACH (b IN [ss[i + 1]] | CREATE (a)-[:NEXT]->(b))))
+"""
+
+# upsert: 이번에 들어온 제품만 지우고 다시 만든다
+_DELETE_PRODUCTS = """
+UNWIND $ids AS id
+MATCH (p:Product {graph: $g, id: id})
+OPTIONAL MATCH (p)-[:PASSED]->(s:Step)
+DETACH DELETE p, s
 """
 
 
 _export_locks: dict[str, threading.Lock] = {}
 
 
-def export_graph(name: str, df: pd.DataFrame, product_key: str, resources: list[tuple[str, str]]) -> dict:
-    products = build_products(df, product_key, resources)
+def export_graph(
+    name: str,
+    df: pd.DataFrame,
+    product_key: str,
+    resources: list[tuple[str, str]],
+    fields: list[str] | None = None,
+    mode: str = "replace",
+) -> dict:
+    """mode=replace: 그래프 전체를 다시 만듦. mode=upsert: 입력에 있는 제품만 바꾸고 나머지는 유지 (증분 적재)."""
+    products = build_products(df, product_key, resources, fields)
     # 스케줄 실행과 수동 실행이 겹치면 삭제/쓰기가 섞이므로 그래프별로 직렬화
     with _lock:
         lock = _export_locks.setdefault(name, threading.Lock())
     with lock:
-        return _write_graph(name, products, product_key, resources)
+        return _write_graph(name, products, product_key, resources, fields or [], mode)
 
 
-def _write_graph(name: str, products: list[dict], product_key: str, resources: list[tuple[str, str]]) -> dict:
+def _write_graph(name: str, products: list[dict], product_key: str, resources: list[tuple[str, str]], fields: list[str], mode: str) -> dict:
     from neo4j.exceptions import Neo4jError, ServiceUnavailable
 
     try:
         with driver().session(database=NEO4J_DATABASE) as s:
             for q in _SCHEMA:
                 s.run(q).consume()
-            for label in ("Step", "Product", "Equipment", "Resource", "PrismGraph"):
-                s.run(
-                    f"MATCH (n:{label} {{graph: $g}}) CALL {{ WITH n DETACH DELETE n }} IN TRANSACTIONS OF 5000 ROWS",
-                    g=name,
-                ).consume()
+            if mode != "upsert":
+                for label in ("Step", "Product", "Equipment", "Resource", "PrismGraph"):
+                    s.run(
+                        f"MATCH (n:{label} {{graph: $g}}) CALL {{ WITH n DETACH DELETE n }} IN TRANSACTIONS OF 5000 ROWS",
+                        g=name,
+                    ).consume()
             for i in range(0, len(products), BATCH):
-                s.execute_write(lambda tx, rows=products[i : i + BATCH]: tx.run(_INSERT, rows=rows, g=name).consume())
-            s.execute_write(lambda tx: tx.run(_LINK_NEXT, g=name).consume())
+                rows = products[i : i + BATCH]
+
+                def write(tx, rows=rows):
+                    if mode == "upsert":
+                        tx.run(_DELETE_PRODUCTS, ids=[p["id"] for p in rows], g=name).consume()
+                    tx.run(_INSERT, rows=rows, g=name).consume()
+
+                s.execute_write(write)
             s.execute_write(
                 lambda tx: tx.run(
-                    "CREATE (:PrismGraph {graph: $g, product_key: $k, resources: $r, updated_at: localdatetime()})",
+                    "MERGE (m:PrismGraph {graph: $g}) SET m.product_key = $k, m.resources = $r, m.fields = $f, m.updated_at = localdatetime()",
                     g=name,
                     k=product_key,
                     r=[f"{c}={k}" for c, k in resources],
+                    f=fields,
                 ).consume()
             )
     except ServiceUnavailable as e:

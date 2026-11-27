@@ -21,12 +21,18 @@ function summary(d: OpNode['data'], ctx: ReturnType<typeof useFlowCtx>): string[
       return [...(keys.length ? keys : ['No keys set']), `${strat[p.strategy ?? 'exact']} · ${how[p.how ?? 'inner']}`];
     }
     case 'dataset':
+      return [p.name ? `📦 ${p.name}` : 'No name set', ...(p.columns?.length ? [`${p.columns.length} columns`] : [])];
     case 'output':
-      return [p.name ? `📦 ${p.name}` : 'No name set'];
+      return [p.name ? `📦 ${p.name}` : 'No name set', ...(p.mode === 'upsert' ? [`Upsert by ${(p.keys ?? []).join(', ') || '-'}`] : [])];
     case 'python':
       return [`${(p.code ?? '').split('\n').length} lines of code`];
     case 'graph':
-      return [p.name ? `🕸 ${p.name}` : 'No graph name set', `Product key: ${p.product_key || '-'}`, ...(p.resources ? [`Shared resources: ${String(p.resources).split('\n').filter(Boolean).length}`] : [])];
+      return [
+        p.name ? `🕸 ${p.name}` : 'No graph name set',
+        `Product key: ${p.product_key || '-'}`,
+        ...(p.resources ? [`Shared resources: ${String(p.resources).split('\n').filter(Boolean).length}`] : []),
+        ...(p.mode === 'upsert' ? ['Upsert products'] : []),
+      ];
     case 'cypher': {
       const first = String(p.query ?? '').split('\n').find((l) => l.trim()) ?? '';
       return [first.length > 60 ? first.slice(0, 60) + '…' : first || 'No query'];

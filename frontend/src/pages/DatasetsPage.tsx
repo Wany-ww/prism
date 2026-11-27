@@ -23,9 +23,11 @@ export default function DatasetsPage() {
       setSp({}, { replace: true });
     }
   }, [sp, list]);
+  // 미리보기 행 수: 컬럼이 많으면 줄여서 응답을 수 MB 이하로 (4,000컬럼이면 75행)
+  const previewRows = sel ? Math.max(50, Math.min(1000, Math.floor(300_000 / Math.max(1, sel.columns.length)))) : 1000;
   useEffect(() => {
     setData(null);
-    if (sel) api.get(`/api/datasets/${encodeURIComponent(sel.name)}/data?limit=1000`).then(setData);
+    if (sel) api.get(`/api/datasets/${encodeURIComponent(sel.name)}/data?limit=${previewRows}`).then(setData);
   }, [sel]);
 
   return (
@@ -61,7 +63,9 @@ export default function DatasetsPage() {
         <>
           <div className="section-title">
             {sel.name}
-            <small>Top 1,000 rows · {sel.row_count.toLocaleString()} total</small>
+            <small>
+              Top {Math.min(previewRows, sel.row_count).toLocaleString()} rows · {sel.row_count.toLocaleString()} total · {sel.columns.length.toLocaleString()} columns
+            </small>
           </div>
           <div className="tile" style={{ padding: 8 }}>
             <DataGrid data={data} height="calc(100vh - 480px)" pageSize={100} />

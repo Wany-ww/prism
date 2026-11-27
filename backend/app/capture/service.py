@@ -1,20 +1,19 @@
 import hashlib
-import json
 import threading
 from datetime import datetime
 
 import pandas as pd
-from sqlalchemy import delete, insert, select
+from sqlalchemy import select
 
 from ..alerts import send_alert
 from ..db import SessionLocal
 from ..engine.usercode import UserCodeError, call_user, load_function, to_frame
-from ..models import CapturedFile, CaptureRun, Equipment, Record
+from ..models import CapturedFile, CaptureRun, Equipment
 from .fetchers import CaptureError, discover, open_fetcher, template_vars
+from .store import write_records
 
 _locks: dict[int, threading.Lock] = {}
 _locks_guard = threading.Lock()
-INSERT_CHUNK = 2000
 
 
 def equipment_lock(eq_id: int) -> threading.Lock:
@@ -46,35 +45,6 @@ def parser_context(eq, source_path: str, mtime: float | None) -> dict:
     }
 
 
-def _dedupe_columns(cols) -> list[str]:
-    seen: dict[str, int] = {}
-    out = []
-    for c in map(str, cols):
-        if c in seen:
-            seen[c] += 1
-            out.append(f"{c}_{seen[c]}")
-        else:
-            seen[c] = 0
-            out.append(c)
-    return out
-
-
-def frame_to_rows(df: pd.DataFrame, default_ts: datetime | None) -> list[tuple[datetime | None, dict]]:
-    """파서 결과 → (ts, data) 목록. `_ts` 컬럼이 있으면 레코드 시각으로 사용."""
-    df = df.copy()
-    df.columns = _dedupe_columns(df.columns)
-    if "_ts" in df.columns:
-        ts = pd.to_datetime(df.pop("_ts"), errors="coerce")
-        if getattr(ts.dt, "tz", None) is not None:
-            ts = ts.dt.tz_convert(None)
-        ts_list = [None if pd.isna(t) else t.to_pydatetime() for t in ts]
-    else:
-        ts_list = [None] * len(df)
-    ts_list = [t or default_ts for t in ts_list]
-    data = json.loads(df.to_json(orient="records", date_format="iso", force_ascii=False)) if len(df) else []
-    return list(zip(ts_list, data))
-
-
 def run_parser(eq, local_path: str, source_path: str, mtime: float | None) -> pd.DataFrame:
     fn = parser_fn(eq)
     label = f"parser:{eq.parser.name}"
@@ -83,22 +53,17 @@ def run_parser(eq, local_path: str, source_path: str, mtime: float | None) -> pd
 
 def ingest_file(db, eq: Equipment, local_path: str, source_path: str, size: int, mtime: float) -> int:
     df = run_parser(eq, local_path, source_path, mtime)
-    rows = frame_to_rows(df, datetime.fromtimestamp(mtime) if mtime else datetime.now())
-
     cf = db.scalar(select(CapturedFile).where(CapturedFile.equipment_id == eq.id, CapturedFile.path == source_path))
     if cf is None:
         cf = CapturedFile(equipment_id=eq.id, path=source_path)
         db.add(cf)
         db.flush()
-    else:
-        db.execute(delete(Record).where(Record.file_id == cf.id))
-    for i in range(0, len(rows), INSERT_CHUNK):
-        chunk = rows[i : i + INSERT_CHUNK]
-        db.execute(insert(Record), [{"equipment_id": eq.id, "file_id": cf.id, "ts": t, "data": d} for t, d in chunk])
-    cf.size, cf.mtime, cf.rows = size, mtime, len(rows)
+    meta = write_records(eq.id, cf.id, df, datetime.fromtimestamp(mtime) if mtime else datetime.now())
+    cf.size, cf.mtime, cf.rows = size, mtime, meta["rows"]
+    cf.ts_min, cf.ts_max, cf.hours = meta["ts_min"], meta["ts_max"], meta["hours"]
     cf.status, cf.error, cf.parser_hash, cf.captured_at = "ok", "", parser_hash(eq), datetime.now()
     db.commit()
-    return len(rows)
+    return meta["rows"]
 
 
 def _mark_file_error(db, eq: Equipment, source_path: str, size: int, mtime: float, err: str):
@@ -209,18 +174,3 @@ def ingest_uploaded(equipment_id: int, local_path: str, source_path: str, size: 
                 _mark_file_error(db, eq, source_path, size, mtime, msg)
                 _finish(db, eq, run, "error", f"{source_path}: {msg}")
                 return {"status": "error", "message": msg}
-
-
-def load_records(db, equipment_ids: list[int], since: datetime | None = None, until: datetime | None = None) -> pd.DataFrame:
-    q = select(Record.equipment_id, Record.ts, Record.data).where(Record.equipment_id.in_(equipment_ids))
-    if since:
-        q = q.where(Record.ts >= since)
-    if until:
-        q = q.where(Record.ts <= until)
-    q = q.order_by(Record.ts, Record.id)
-    rows = db.execute(q).all()
-    names = dict(db.execute(select(Equipment.id, Equipment.name).where(Equipment.id.in_(equipment_ids))).all())
-    df = pd.DataFrame([r.data for r in rows])
-    df["_ts"] = pd.to_datetime(pd.Series([r.ts for r in rows], dtype="object"))
-    df["_equipment"] = [names.get(r.equipment_id, "") for r in rows]
-    return df

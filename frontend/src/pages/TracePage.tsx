@@ -72,6 +72,10 @@ export default function TracePage() {
   }
 
   const groups = res && res.rows[sel] ? groupRow(res, res.rows[sel]) : [];
+  // 컬럼이 많은 결과는 공정 카드 안 필드를 이름으로 걸러 볼 수 있게
+  const [fieldQ, setFieldQ] = useState('');
+  const fq = fieldQ.trim().toLowerCase();
+  const fieldCount = groups.reduce((s, g) => s + g.fields.length, 0);
 
   // Neo4j 그래프가 이 데이터셋과 같은 이름으로 저장되어 있으면 영향 범위 분석을 함께 표시
   const graphMeta = gstat?.connected ? gstat.graphs?.find((g) => g.graph === ds) : undefined;
@@ -102,7 +106,7 @@ export default function TracePage() {
         />
         <Space wrap style={{ marginTop: 12 }}>
           <Select style={{ width: 200 }} value={ds} onChange={setDs} options={datasets.map((d) => ({ value: d.name, label: d.name }))} placeholder="Match result dataset" />
-          <Select allowClear showSearch style={{ width: 220 }} value={column} onChange={setColumn} placeholder="Search column (all)" options={cols.map((c) => ({ value: c, label: c }))} />
+          <Select allowClear showSearch style={{ width: 220 }} value={column} onChange={setColumn} placeholder="Search column (key columns)" options={cols.map((c) => ({ value: c, label: c }))} />
           <div className="pill-tabs">
             <div className={`pill-tab ${mode === 'exact' ? 'active' : ''}`} style={{ background: mode === 'exact' ? 'var(--panel)' : undefined }} onClick={() => setMode('exact')}>
               Exact
@@ -122,12 +126,31 @@ export default function TracePage() {
       {res && (
         <div style={{ marginTop: 24 }}>
           {res.row_count === 0 ? (
-            <Empty description="No matching products" style={{ marginTop: 48 }} />
+            <Empty
+              description={
+                <>
+                  No matching products
+                  {res.searched_columns && (
+                    <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                      Searched {res.searched_columns.join(', ')}. Pick another column above to search it.
+                    </div>
+                  )}
+                </>
+              }
+              style={{ marginTop: 48 }}
+            />
           ) : (
             <>
-              <div className="section-title" style={{ marginTop: 0 }}>
-                Process history
-                <small>{res.row_count} matches</small>
+              <div className="section-title" style={{ marginTop: 0, justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
+                  Process history
+                  <small>
+                    {res.row_count} matches{res.searched_columns && !column ? ` · in ${res.searched_columns.join(', ')}` : ''}
+                  </small>
+                </span>
+                {fieldCount > 40 && (
+                  <Input allowClear size="small" style={{ width: 220 }} prefix={<SearchOutlined className="muted" />} placeholder={`Filter ${fieldCount.toLocaleString()} fields`} value={fieldQ} onChange={(e) => setFieldQ(e.target.value)} />
+                )}
               </div>
               {res.row_count > 1 && (
                 <div className="pill-tabs" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
@@ -156,13 +179,15 @@ export default function TracePage() {
                         {g.ts != null && <div className="num">{String(g.ts)}</div>}
                         {g.equipment == null && g.ts == null && g.fields.every((f) => f.value == null) && <Typography.Text type="warning">No record for this step</Typography.Text>}
                       </div>
-                      <div className="kv">
-                        {g.fields.map((f) => (
-                          <Fragment key={f.key}>
-                            <span>{f.key}</span>
-                            <span>{fmtCell(f.value, f.dtype)}</span>
-                          </Fragment>
-                        ))}
+                      <div className="kv" style={fieldCount > 40 ? { maxHeight: 420, overflowY: 'auto' } : undefined}>
+                        {g.fields
+                          .filter((f) => !fq || f.key.toLowerCase().includes(fq))
+                          .map((f) => (
+                            <Fragment key={f.key}>
+                              <span>{f.key}</span>
+                              <span>{fmtCell(f.value, f.dtype)}</span>
+                            </Fragment>
+                          ))}
                       </div>
                     </div>
                   </Fragment>

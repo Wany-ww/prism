@@ -21,13 +21,19 @@ _load_env_file(BACKEND_DIR / ".env")
 
 DATA_DIR = Path(os.environ.get("PRISM_DATA_DIR", BACKEND_DIR / "data"))
 DATASET_DIR = DATA_DIR / "datasets"
+# 수집 원본 레코드: 설비별 폴더에 수집 파일 1개당 parquet 1개
+RECORDS_DIR = DATA_DIR / "records"
 STAGING_DIR = DATA_DIR / "staging"
 FRONTEND_DIST = ROOT_DIR / "frontend" / "dist"
 
 DATABASE_URL = os.environ.get("PRISM_DATABASE_URL", f"sqlite:///{(DATA_DIR / 'prism.db').as_posix()}")
 
 SCHEDULER_ENABLED = os.environ.get("PRISM_SCHEDULER", "1") == "1"
-SCHEDULER_WORKERS = int(os.environ.get("PRISM_WORKERS", "4"))
+# 수집·Flow 는 API 와 다른 프로세스에서 실행 (GIL 때문에 무거운 작업이 화면 응답을 막지 않도록)
+CAPTURE_WORKERS = int(os.environ.get("PRISM_CAPTURE_WORKERS", os.environ.get("PRISM_WORKERS", "4")))
+FLOW_WORKERS = int(os.environ.get("PRISM_FLOW_WORKERS", "2"))
+# 데이터셋 메모리 캐시 한도 (MB). 이보다 큰 조회 결과는 캐시하지 않는다.
+CACHE_MB = int(os.environ.get("PRISM_CACHE_MB", "1024"))
 # Agent(push) 업로드 인증 토큰. 비어 있으면 검사하지 않음.
 AGENT_TOKEN = os.environ.get("PRISM_AGENT_TOKEN", "")
 SEED_DEMO = os.environ.get("PRISM_SEED_DEMO", "1") == "1"
@@ -43,5 +49,5 @@ NEO4J_USER = os.environ.get("PRISM_NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.environ.get("PRISM_NEO4J_PASSWORD", "")
 NEO4J_DATABASE = os.environ.get("PRISM_NEO4J_DATABASE", "neo4j")
 
-for d in (DATA_DIR, DATASET_DIR, STAGING_DIR):
+for d in (DATA_DIR, DATASET_DIR, RECORDS_DIR, STAGING_DIR):
     d.mkdir(parents=True, exist_ok=True)

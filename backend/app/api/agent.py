@@ -14,10 +14,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..capture.fetchers import DATE_FOLDER_DEPTH, candidate_locations, day_keys, render
-from ..capture.service import ingest_uploaded, parser_hash
+from ..capture.service import parser_hash
 from ..config import AGENT_TOKEN, STAGING_DIR
 from ..db import get_db
 from ..models import CapturedFile, Equipment
+from ..scheduler import scheduler
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
@@ -80,6 +81,6 @@ def agent_upload(
         local = os.path.join(tmp_dir, os.path.basename(path.replace("\\", "/")) or "upload")
         with open(local, "wb") as f:
             shutil.copyfileobj(file.file, f)
-        return ingest_uploaded(eq.id, local, path, size, mtime)
+        return scheduler.ingest(eq.id, local, path, size, mtime)
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)

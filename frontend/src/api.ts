@@ -1,5 +1,5 @@
 export type ColumnMeta = { name: string; dtype: 'number' | 'string' | 'datetime' | 'bool' };
-export type FramePayload = { columns: ColumnMeta[]; rows: unknown[][]; row_count: number };
+export type FramePayload = { columns: ColumnMeta[]; rows: unknown[][]; row_count: number; searched_columns?: string[] };
 
 export class ApiError extends Error {}
 

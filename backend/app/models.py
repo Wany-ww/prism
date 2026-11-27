@@ -7,7 +7,6 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
-    Index,
     Integer,
     String,
     Text,
@@ -19,7 +18,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .db import Base
 
 JSONType = JSON().with_variant(JSONB(), "postgresql")
-BigId = BigInteger().with_variant(Integer(), "sqlite")
 
 
 def now():
@@ -83,21 +81,15 @@ class CapturedFile(Base):
     size: Mapped[int] = mapped_column(BigInteger, default=0)
     mtime: Mapped[float] = mapped_column(Float, default=0)
     rows: Mapped[int] = mapped_column(Integer, default=0)
+    # 레코드 본문은 records/<equipment_id>/<id>.parquet. 시각 범위로 읽을 파일을 고르고, 시간대별 건수로 활동 그래프를 그린다.
+    ts_min: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ts_max: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    hours: Mapped[dict | None] = mapped_column(JSONType, nullable=True)
     # 파서 코드가 바뀌면 같은 파일도 다시 파싱하기 위해 보관
     parser_hash: Mapped[str] = mapped_column(String(40), default="")
     status: Mapped[str] = mapped_column(String(20), default="ok")
     error: Mapped[str] = mapped_column(Text, default="")
     captured_at: Mapped[datetime] = mapped_column(DateTime, default=now)
-
-
-class Record(Base):
-    __tablename__ = "records"
-    __table_args__ = (Index("ix_records_eq_ts", "equipment_id", "ts"),)
-    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
-    equipment_id: Mapped[int] = mapped_column(ForeignKey("equipment.id", ondelete="CASCADE"))
-    file_id: Mapped[int] = mapped_column(ForeignKey("captured_files.id", ondelete="CASCADE"), index=True)
-    ts: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    data: Mapped[dict] = mapped_column(JSONType)
 
 
 class CaptureRun(Base):

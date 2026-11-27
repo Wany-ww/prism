@@ -1033,6 +1033,72 @@ body.resizing-row .flow-canvas {
 .grid-selectable .ant-table-tbody > tr {
   cursor: pointer;
 }
+
+/* ---------- VirtualGrid (행·열 가상화 표, 컬럼이 많은 데이터) ---------- */
+.vgrid {
+  position: relative;
+  overflow: auto;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.vgrid-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.content.sub .vgrid-head,
+.tile .vgrid-head {
+  background: var(--panel);
+}
+.vgrid-h {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  font-weight: 500;
+  color: var(--text-2);
+  cursor: pointer;
+  user-select: none;
+}
+.vgrid-h:hover {
+  color: var(--text-1);
+}
+.vgrid-h .anticon {
+  font-size: 10px;
+  color: var(--blue);
+}
+.vgrid-t,
+.vgrid-c {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vgrid-r {
+  position: absolute;
+  left: 0;
+  height: 36px;
+}
+.vgrid-r:hover .vgrid-c {
+  background: var(--tile-2);
+}
+.vgrid-r.clickable {
+  cursor: pointer;
+}
+.vgrid-r.selected .vgrid-c {
+  background: var(--blue-soft);
+}
+.vgrid-c {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  line-height: 36px;
+  padding: 0 8px;
+}
 .ant-table-wrapper .ant-table-tbody > tr.row-selected > td {
   background: var(--blue-soft);
 }

@@ -51,6 +51,8 @@ def ensure_columns():
                 if not col.nullable and default is not None and not callable(default):
                     ddl += " NOT NULL"
                 conn.execute(text(ddl))
+            for idx in table.indexes:
+                idx.create(conn, checkfirst=True)
 
 
 def get_db():

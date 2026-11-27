@@ -3,17 +3,16 @@ import os
 from datetime import datetime
 from types import SimpleNamespace
 
-import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from ..capture import store
 from ..capture.fetchers import CaptureError, candidate_locations, discover, open_fetcher, resolve_locations
-from ..capture.service import is_running, run_capture
 from ..db import get_db
 from ..engine.frames import frame_payload
-from ..models import CapturedFile, CaptureRun, Equipment, Flow, Record
+from ..models import CapturedFile, CaptureRun, Equipment, Flow
 from ..scheduler import scheduler
 from .common import get_or_404, row_dict
 
@@ -49,7 +48,7 @@ def eq_out(eq: Equipment, stats: dict | None = None) -> dict:
     d = row_dict(eq)
     d["password"] = MASK if eq.password else ""
     d["parser_name"] = eq.parser.name if eq.parser else None
-    d["running"] = is_running(eq.id)
+    d["running"] = scheduler.is_capturing(eq.id)
     if stats is not None:
         d["file_count"], d["record_count"] = stats.get(eq.id, (0, 0))
     return d
@@ -158,11 +157,9 @@ def _delete(db, ids: list[int]) -> dict:
     eqs = db.scalars(select(Equipment).where(Equipment.id.in_(ids))).all()
     if not eqs:
         raise HTTPException(404, "Equipment not found")
-    if any(is_running(e.id) for e in eqs):
+    if any(scheduler.is_capturing(e.id) for e in eqs):
         raise HTTPException(409, "Some equipment is capturing right now. Try again shortly.")
     gone = {e.id for e in eqs}
-    # SQLite 는 대량 cascade 가 느리므로 레코드부터 명시적으로 삭제
-    db.execute(delete(Record).where(Record.equipment_id.in_(gone)))
     db.execute(delete(CapturedFile).where(CapturedFile.equipment_id.in_(gone)))
     db.execute(delete(CaptureRun).where(CaptureRun.equipment_id.in_(gone)))
     flows = _flows_using(db, gone)
@@ -176,6 +173,8 @@ def _delete(db, ids: list[int]) -> dict:
     for e in eqs:
         db.delete(e)
     db.commit()
+    for i in gone:
+        store.delete_equipment(i)
     return {"ok": True, "deleted": sorted(gone), "flows_updated": [f.name for f in flows]}
 
 
@@ -185,17 +184,19 @@ def capture_now(eq_id: int, wait: bool = True, db: Session = Depends(get_db)):
     if not wait:
         scheduler.submit_capture(eq_id, "manual")
         return {"status": "queued"}
-    return run_capture(eq_id, "manual")
+    return scheduler.run_capture_wait(eq_id, "manual")
 
 
 @router.post("/{eq_id}/reset")
 def reset_equipment(eq_id: int, db: Session = Depends(get_db)):
     """수집 이력/레코드 삭제 → 다음 수집 시 전체 재파싱."""
     eq = get_or_404(db, Equipment, eq_id)
-    db.execute(delete(Record).where(Record.equipment_id == eq_id))
+    if scheduler.is_capturing(eq_id):
+        raise HTTPException(409, "This equipment is capturing right now. Try again shortly.")
     db.execute(delete(CapturedFile).where(CapturedFile.equipment_id == eq_id))
     eq.next_capture_at = None
     db.commit()
+    store.delete_equipment(eq_id)
     return {"ok": True}
 
 
@@ -267,30 +268,14 @@ def runs(eq_id: int, limit: int = 50, db: Session = Depends(get_db)):
 
 @router.get("/{eq_id}/records")
 def records(eq_id: int, limit: int = 200, offset: int = 0, db: Session = Depends(get_db)):
-    total = db.scalar(select(func.count()).select_from(Record).where(Record.equipment_id == eq_id))
-    q = (
-        select(Record.ts, Record.data)
-        .where(Record.equipment_id == eq_id)
-        .order_by(Record.ts.desc(), Record.id.desc())
-        .offset(offset)
-        .limit(limit)
-    )
-    rows = db.execute(q).all()
-    df = pd.DataFrame([r.data for r in rows])
-    df.insert(0, "_ts", pd.to_datetime(pd.Series([r.ts for r in rows], dtype="object")))
-    out = frame_payload(df, None)
-    out["row_count"] = total
-    return out
+    df, total = store.latest_records(db, eq_id, max(0, offset), max(1, min(limit, 5000)))
+    # 컬럼이 많으면 행 수를 줄여 응답을 수 MB 이하로
+    return frame_payload(df, max(20, 300_000 // max(1, df.shape[1])), row_count=total)
 
 
 @router.get("/{eq_id}/fields")
 def fields(eq_id: int, db: Session = Depends(get_db)):
-    q = select(Record.data).where(Record.equipment_id == eq_id).order_by(Record.id.desc()).limit(200)
-    keys: dict[str, None] = {}
-    for d in db.scalars(q):
-        for k in d or {}:
-            keys.setdefault(k, None)
-    return list(keys) + ["_ts", "_equipment"]
+    return store.fields(db, eq_id)
 
 
 @router.get("/{eq_id}/parser-sample")

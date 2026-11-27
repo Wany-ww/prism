@@ -1,8 +1,8 @@
-import io
 import json
 import re
 from datetime import datetime, timedelta
 
+import numpy as np
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -11,16 +11,16 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..engine.frames import delete_dataset_file, frame_payload, load_dataset
-from ..models import CapturedFile, CaptureRun, Dashboard, Dataset, Equipment, Flow, NodeType, Parser, Record
+from ..engine.frames import dataset_columns, delete_dataset_file, frame_payload, iter_csv, load_dataset, norm_keys, read_range, search_dataset
+from ..models import CapturedFile, CaptureRun, Dashboard, Dataset, Equipment, Flow, NodeType, Parser
 from .common import get_or_404, json_download, row_dict
 
 router = APIRouter(prefix="/api", tags=["data"])
 
 
-def _load(db, name: str) -> pd.DataFrame:
+def _columns(db, name: str) -> list[str]:
     try:
-        return load_dataset(db, name)
+        return dataset_columns(db, name)
     except KeyError as e:
         raise HTTPException(404, str(e)) from e
 
@@ -39,14 +39,6 @@ def list_datasets(db: Session = Depends(get_db)):
     return out
 
 
-def _norm_keys(s: pd.Series) -> pd.Series:
-    """대시보드 선택 연동용 키 비교: 공백 제거, 1.0 → 1."""
-    if pd.api.types.is_datetime64_any_dtype(s):
-        s = s.dt.strftime("%Y-%m-%d %H:%M:%S.%f").str[:-3]  # frame_payload 와 같은 표기
-    s = s.astype(str).str.strip()
-    return s.str.replace(r"^(-?\d+)\.0+$", r"\1", regex=True)
-
-
 @router.get("/datasets/{name}/data")
 def dataset_data(
     name: str,
@@ -57,33 +49,34 @@ def dataset_data(
     filter_values: str = "",
     db: Session = Depends(get_db),
 ):
-    """filter_col/filter_values(JSON 배열) 를 주면 해당 컬럼 값이 목록에 있는 행만 반환."""
-    df = _load(db, name)
-    if filter_col:
-        if filter_col not in df.columns:
-            raise HTTPException(400, f"Column '{filter_col}' does not exist.")
-        try:
-            values = json.loads(filter_values or "[]")
-        except ValueError as e:
-            raise HTTPException(400, "filter_values must be a JSON array.") from e
-        wanted = set(_norm_keys(pd.Series([str(v) for v in values], dtype=object)))
-        df = df[_norm_keys(df[filter_col]).isin(wanted)]
-    if columns:
-        cols = [c for c in columns.split(",") if c in df.columns]
+    """columns 를 주면 그 컬럼만 읽음. filter_col/filter_values(JSON 배열) 를 주면 해당 컬럼 값이 목록에 있는 행만 반환."""
+    all_cols = _columns(db, name)
+    cols = [c for c in columns.split(",") if c in all_cols] if columns else None
+    limit = min(limit, 200000) if limit > 0 else None
+    if not filter_col:
+        df, total = read_range(db, name, max(0, offset), limit, cols)
+        return frame_payload(df, None, row_count=total)
+    if filter_col not in all_cols:
+        raise HTTPException(400, f"Column '{filter_col}' does not exist.")
+    try:
+        values = json.loads(filter_values or "[]")
+    except ValueError as e:
+        raise HTTPException(400, "filter_values must be a JSON array.") from e
+    wanted = set(norm_keys(pd.Series([str(v) for v in values], dtype=object)))
+    df = load_dataset(db, name, None if cols is None else list(dict.fromkeys([*cols, filter_col])))
+    df = df[norm_keys(df[filter_col]).isin(wanted)]
+    if cols is not None:
         df = df[cols]
-    return frame_payload(df, min(limit, 200000) if limit > 0 else None, offset)
+    return frame_payload(df, limit, offset)
 
 
 @router.get("/datasets/{name}/csv")
 def dataset_csv(name: str, db: Session = Depends(get_db)):
-    df = _load(db, name)
-    buf = io.StringIO()
-    df.to_csv(buf, index=False)
-    data = io.BytesIO(buf.getvalue().encode("utf-8-sig"))
     from urllib.parse import quote
 
+    _columns(db, name)
     return StreamingResponse(
-        data,
+        iter_csv(db, name),
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(name)}.csv"},
     )
@@ -101,17 +94,43 @@ def delete_dataset(ds_id: int, db: Session = Depends(get_db)):
 # ---------- Trace ----------
 
 
+KEY_COL_RE = re.compile(r"(vaid|qr|serial|s/?n$|tray no|lot|barcode|id$)", re.I)
+
+
+def key_columns(meta: list[dict]) -> list[str]:
+    """제품 키로 보이는 컬럼 (QR, VAID, Serial, Lot, …_id). 시각 컬럼은 제외."""
+    return [c["name"] for c in meta if c["dtype"] != "datetime" and KEY_COL_RE.search(c["name"])]
+
+
 @router.get("/trace/search")
 def trace_search(dataset: str, q: str, column: str = "", mode: str = "exact", limit: int = 50, db: Session = Depends(get_db)):
-    """매칭 결과 데이터셋에서 제품 키(QR, VAID 등)로 공정 이력을 검색."""
-    df = _load(db, dataset)
+    """매칭 결과 데이터셋에서 제품 키(QR, VAID 등)로 공정 이력을 검색.
+    컬럼을 지정하지 않으면 키처럼 보이는 컬럼만 찾는다 (수천 개 컬럼을 모두 문자열로 바꿔 비교하면 검색 1번에 몇 분씩 걸림)."""
+    ds = db.scalar(select(Dataset).where(Dataset.name == dataset))
+    if ds is None:
+        raise HTTPException(404, f"Dataset [{dataset}] does not exist. Run its flow first.")
+    meta = ds.columns or []
+    names = [c["name"] for c in meta]
     q = q.strip()
-    cols = [column] if column and column in df.columns else [c for c in df.columns if not pd.api.types.is_datetime64_any_dtype(df[c])]
-    mask = pd.Series(False, index=df.index)
-    for c in cols:
-        s = df[c].astype(str).str.strip()
-        mask |= s.str.contains(q, case=False, regex=False) if mode == "contains" else (s == q) | (s.str.removesuffix(".0") == q)
-    return frame_payload(df[mask], limit)
+    if column:
+        cols = [c for c in column.split(",") if c in names]
+    else:
+        cols = key_columns(meta) or [c["name"] for c in meta if c["dtype"] == "string"][:50]
+    if not cols:
+        raise HTTPException(400, "No column to search. Pick a key column.")
+
+    def match(sub: pd.DataFrame):
+        mask = np.zeros(len(sub), dtype=bool)
+        for c in sub.columns:
+            s = sub[c].astype(str).str.strip()
+            hit = s.str.contains(q, case=False, regex=False) if mode == "contains" else (s == q) | (s.str.removesuffix(".0") == q)
+            mask |= hit.fillna(False).to_numpy(dtype=bool)
+        return mask
+
+    df, total = search_dataset(db, dataset, cols, match, max(1, min(limit, 1000)))
+    out = frame_payload(df, None, row_count=total)
+    out["searched_columns"] = cols
+    return out
 
 
 # ---------- Dashboards ----------
@@ -254,21 +273,17 @@ def activity(hours: int = 24, db: Session = Depends(get_db)):
     """설비별 시간당 레코드 수 (홈 타일 스파크라인용)."""
     hours = max(1, min(hours, 24 * 14))
     start = (datetime.now() - timedelta(hours=hours - 1)).replace(minute=0, second=0, microsecond=0)
-    if db.bind.dialect.name == "postgresql":
-        bucket = func.to_char(func.date_trunc("hour", Record.ts), "YYYY-MM-DD HH24")
-    else:
-        bucket = func.strftime("%Y-%m-%d %H", Record.ts)
+    # 수집 파일마다 저장해 둔 시간대별 건수를 합산 (레코드 본문은 읽지 않음)
     rows = db.execute(
-        select(Record.equipment_id, bucket.label("b"), func.count())
-        .where(Record.ts >= start)
-        .group_by(Record.equipment_id, bucket)
+        select(CapturedFile.equipment_id, CapturedFile.hours).where(CapturedFile.ts_max >= start, CapturedFile.rows > 0)
     ).all()
     keys = [(start + timedelta(hours=i)).strftime("%Y-%m-%d %H") for i in range(hours)]
     idx = {k: i for i, k in enumerate(keys)}
     out: dict[int, list[int]] = {}
-    for eq_id, b, n in rows:
-        if b in idx:
-            out.setdefault(eq_id, [0] * hours)[idx[b]] = n
+    for eq_id, hist in rows:
+        for b, n in (hist or {}).items():
+            if b in idx:
+                out.setdefault(eq_id, [0] * hours)[idx[b]] += int(n)
     return {"hours": keys, "series": out}
 
 

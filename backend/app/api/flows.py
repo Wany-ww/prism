@@ -6,8 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..engine.flow import preview, run_flow
 from ..models import Flow, NodeType
+from ..scheduler import scheduler
 from .common import get_or_404, json_download, row_dict
 
 router = APIRouter(prefix="/api", tags=["flows"])
@@ -196,11 +196,11 @@ def import_flow(body: dict, db: Session = Depends(get_db)):
 
 @router.post("/flows/preview")
 def preview_flow(body: PreviewIn, db: Session = Depends(get_db)):
-    """저장하지 않은 그래프를 target 노드까지 실행해 결과 미리보기."""
-    return preview(db, body.graph, body.target, min(body.limit, 5000))
+    """저장하지 않은 그래프를 target 노드까지 실행해 결과 미리보기 (작업 프로세스에서 실행)."""
+    return scheduler.preview(body.graph, body.target, min(body.limit, 5000))
 
 
 @router.post("/flows/{fid}/run")
 def execute_flow(fid: int, db: Session = Depends(get_db)):
     get_or_404(db, Flow, fid)
-    return run_flow(fid, "manual")
+    return scheduler.run_flow_wait(fid, "manual")

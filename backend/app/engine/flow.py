@@ -98,6 +98,17 @@ def execute_graph(db, graph: dict, target: str | None = None, save: bool = False
     ctx = RunContext(db=db, save=save, flow_id=flow_id)
     results: dict[str, pd.DataFrame] = {}
     status: dict[str, dict] = {}
+    # 결과를 아직 쓸 노드 수. 0 이 되면 메모리에서 놓아준다 (큰 중간 결과가 끝까지 쌓이지 않게)
+    pending = defaultdict(int)
+    for e in edges:
+        if e["source"] in needed and e["target"] in needed:
+            pending[e["source"]] += 1
+
+    def release(ins):
+        for e in ins:
+            pending[e["source"]] -= 1
+            if pending[e["source"]] <= 0 and e["source"] != target:
+                results.pop(e["source"], None)
 
     for nid in _topo(needed, edges):
         node = nodes[nid]
@@ -108,16 +119,19 @@ def execute_graph(db, graph: dict, target: str | None = None, save: bool = False
         )
         if any(e["source"] not in results for e in ins):
             status[nid] = {"status": "skipped", "error": "Skipped because an upstream node failed."}
+            release(ins)
             continue
         if data.get("disabled"):
             results[nid] = results[ins[0]["source"]] if ins else pd.DataFrame()
             status[nid] = {"status": "disabled", "rows": len(results[nid]), "columns": columns_meta(results[nid])}
+            release(ins)
             continue
         ctx.current_node = nid
         t0 = time.perf_counter()
         try:
             df = run_node(ctx, data, [results[e["source"]] for e in ins])
-            results[nid] = df
+            if pending[nid] > 0 or nid == target:
+                results[nid] = df
             status[nid] = {
                 "status": "ok",
                 "rows": int(len(df)),
@@ -129,15 +143,28 @@ def execute_graph(db, graph: dict, target: str | None = None, save: bool = False
         except Exception as e:
             db.rollback()
             status[nid] = {"status": "error", "error": f"{type(e).__name__}: {e}" if not isinstance(e, NodeError) else str(e)}
+        release(ins)
     return results, status
+
+
+# 미리보기는 셀 수로 제한 (컬럼이 수천 개면 행 수를 줄여 응답을 수 MB 이하로)
+PREVIEW_MAX_CELLS = 300_000
 
 
 def preview(db, graph: dict, target: str, limit: int = 200) -> dict:
     results, status = execute_graph(db, graph, target=target, save=False)
     out = {"nodes": status}
     if target in results:
-        out["preview"] = frame_payload(results[target], limit)
+        df = results[target]
+        rows = min(limit, max(20, PREVIEW_MAX_CELLS // max(1, df.shape[1])))
+        out["preview"] = frame_payload(df, rows)
     return out
+
+
+def preview_job(graph: dict, target: str, limit: int) -> dict:
+    """작업 프로세스에서 실행되는 미리보기 (DB 세션을 직접 연다)."""
+    with SessionLocal() as db:
+        return preview(db, graph, target, limit)
 
 
 def run_flow(flow_id: int, trigger: str = "manual") -> dict:

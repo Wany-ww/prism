@@ -45,19 +45,27 @@ export default function NodeConfig({ node, update, setParams, inputCols, onRun, 
         {d.kind === 'source' && <SourceForm p={d.params} set={setParams} />}
         {d.kind === 'match' && <MatchForm p={d.params} set={setParams} left={inputCols('left')} right={inputCols('right')} />}
         {d.kind === 'dataset' && (
-          <Form.Item label="Dataset" extra="Match/Analysis Flow 의 Output 노드에서 저장된 결과">
-            <AutoComplete
-              value={d.params.name}
-              onChange={(v) => setParams({ name: v })}
-              options={ctx.datasets.map((x) => ({ value: x.name, label: `${x.name}  (${x.row_count.toLocaleString()} rows · ${x.flow_name ?? '-'})` }))}
-            />
-          </Form.Item>
+          <>
+            <Form.Item label="Dataset" extra="Match/Analysis Flow 의 Output 노드에서 저장된 결과">
+              <AutoComplete
+                value={d.params.name}
+                onChange={(v) => setParams({ name: v })}
+                options={ctx.datasets.map((x) => ({ value: x.name, label: `${x.name}  (${x.row_count.toLocaleString()} rows · ${x.flow_name ?? '-'})` }))}
+              />
+            </Form.Item>
+            <Form.Item label="Columns to use (empty = all)" extra="필요한 컬럼만 고르면 그 컬럼만 디스크에서 읽습니다. 컬럼이 많은 데이터셋은 꼭 지정하세요.">
+              <Select
+                mode="multiple"
+                allowClear
+                value={d.params.columns ?? []}
+                onChange={(v) => setParams({ columns: v })}
+                options={colOptions(ctx.datasets.find((x) => x.name === d.params.name)?.columns.map((c) => c.name) ?? [])}
+                maxTagCount="responsive"
+              />
+            </Form.Item>
+          </>
         )}
-        {d.kind === 'output' && (
-          <Form.Item label="Dataset name to save" extra="Flow 실행(저장) 시 이 이름으로 결과가 저장됩니다. 같은 이름은 덮어씁니다.">
-            <AutoComplete value={d.params.name} onChange={(v) => setParams({ name: v })} options={ctx.datasets.map((x) => ({ value: x.name }))} />
-          </Form.Item>
-        )}
+        {d.kind === 'output' && <OutputForm p={d.params} set={setParams} cols={inputCols()} />}
         {d.kind === 'union' && <Typography.Paragraph type="secondary">연결된 모든 입력을 위아래로 이어붙입니다. 컬럼이 다르면 빈 값으로 채워집니다.</Typography.Paragraph>}
         {d.kind === 'python' && <PythonForm p={d.params} set={setParams} />}
         {d.kind === 'graph' && <GraphForm p={d.params} set={setParams} cols={inputCols()} />}
@@ -255,17 +263,67 @@ function GraphStatusBanner() {
   return <Alert type="success" showIcon style={{ marginBottom: 12 }} message={`Connected to ${st.version} · ${st.graphs?.length ?? 0} graphs`} />;
 }
 
+function OutputForm({ p, set, cols }: { p: Record<string, any>; set: (x: Record<string, any>) => void; cols: string[] }) {
+  const { datasets } = useFlowCtx();
+  const mode = p.mode ?? 'replace';
+  return (
+    <>
+      <Form.Item label="Dataset name to save" extra="Flow 실행(저장) 시 이 이름으로 결과가 저장됩니다.">
+        <AutoComplete value={p.name} onChange={(v) => set({ name: v })} options={datasets.map((x) => ({ value: x.name }))} />
+      </Form.Item>
+      <Form.Item
+        label="Save mode"
+        extra={
+          mode === 'upsert'
+            ? '키가 같은 기존 행은 새 결과로 바꾸고, 이번 결과에 없는 행은 그대로 둡니다. 설비 데이터 노드의 기간을 최근 며칠로 두면 매번 새로 들어온 제품만 처리해 누적할 수 있습니다.'
+            : '저장할 때마다 데이터셋 전체를 이번 결과로 바꿉니다.'
+        }
+      >
+        <Radio.Group
+          optionType="button"
+          value={mode}
+          onChange={(e) => set({ mode: e.target.value })}
+          options={[
+            { value: 'replace', label: 'Replace all' },
+            { value: 'upsert', label: 'Upsert by key' },
+          ]}
+        />
+      </Form.Item>
+      {mode === 'upsert' && (
+        <Form.Item label="Key columns" extra="제품을 구분하는 컬럼 (예: drive.VAID). 여러 개면 모두 같아야 같은 행으로 봅니다.">
+          <Select mode="multiple" value={p.keys ?? []} onChange={(v) => set({ keys: v })} options={colOptions(cols)} status={(p.keys ?? []).length ? undefined : 'warning'} />
+        </Form.Item>
+      )}
+    </>
+  );
+}
+
 function GraphForm({ p, set, cols }: { p: Record<string, any>; set: (x: Record<string, any>) => void; cols: string[] }) {
   const addResource = (c: string) => {
     const lines = String(p.resources ?? '').split('\n').filter(Boolean);
     if (!lines.some((l) => l.split('=')[0].trim() === c)) set({ resources: [...lines, c].join('\n') });
   };
+  const mode = p.mode ?? 'replace';
   return (
     <>
       <GraphStatusBanner />
       <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
-        Flow 를 <b>Run all · save</b> 하면 결과를 제품 → 공정 단계 → 설비 / 공유 자원 그래프로 Neo4j 에 다시 씁니다. 제품 Trace 화면의 영향 범위 분석과 그래프 보기에 쓰입니다.
+        Flow 를 <b>Run all · save</b> 하면 결과를 제품 → 공정 단계 → 설비 / 공유 자원 그래프로 Neo4j 에 씁니다. 제품 Trace 화면의 영향 범위 분석과 그래프 보기에 쓰입니다.
       </Typography.Paragraph>
+      <Form.Item
+        label="Write mode"
+        extra={mode === 'upsert' ? '이번 결과에 있는 제품만 지우고 다시 쓰고, 나머지 제품은 그대로 둡니다 (증분 적재).' : '저장할 때마다 그래프 전체를 지우고 다시 만듭니다.'}
+      >
+        <Radio.Group
+          optionType="button"
+          value={mode}
+          onChange={(e) => set({ mode: e.target.value })}
+          options={[
+            { value: 'replace', label: 'Rebuild all' },
+            { value: 'upsert', label: 'Upsert products' },
+          ]}
+        />
+      </Form.Item>
       <Form.Item label="Graph name" extra="제품 Trace 에서 같은 이름의 데이터셋을 조회하면 이 그래프를 함께 사용합니다.">
         <Input value={p.name} onChange={(e) => set({ name: e.target.value })} placeholder="product_trace" />
       </Form.Item>
@@ -279,7 +337,7 @@ function GraphForm({ p, set, cols }: { p: Record<string, any>; set: (x: Record<s
         <Input.TextArea className="mono" autoSize={{ minRows: 2, maxRows: 8 }} value={p.resources} onChange={(e) => set({ resources: e.target.value })} />
       </Form.Item>
       {cols.length > 0 && (
-        <Space wrap style={{ marginTop: -8 }}>
+        <Space wrap style={{ marginTop: -8, marginBottom: 12 }}>
           {cols
             .filter((c) => /tray|qr|jig|lot|carrier|pallet|fixture|자재|지그/i.test(c))
             .slice(0, 8)
@@ -290,6 +348,12 @@ function GraphForm({ p, set, cols }: { p: Record<string, any>; set: (x: Record<s
             ))}
         </Space>
       )}
+      <Form.Item
+        label="Extra step fields (optional)"
+        extra="판정 필드(Judge, Result, Status …)는 항상 저장됩니다. 그 밖에 그래프에서 볼 필드만 적으세요. 'drive.Torque' 는 그 컬럼만, 'Torque' 는 모든 공정의 같은 필드. 전체 컬럼을 넣지 않는 것은 적재 시간을 줄이기 위해서입니다."
+      >
+        <Input.TextArea className="mono" autoSize={{ minRows: 1, maxRows: 6 }} value={p.fields} onChange={(e) => set({ fields: e.target.value })} placeholder="drive.Torque" />
+      </Form.Item>
     </>
   );
 }

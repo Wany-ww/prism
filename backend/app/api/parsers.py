@@ -9,7 +9,8 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..capture.service import frame_to_rows, parser_context
+from ..capture.service import parser_context
+from ..capture.store import record_ts
 from ..db import get_db
 from ..engine.frames import frame_payload
 from ..engine.usercode import UserCodeError, call_user, load_function, to_frame
@@ -128,14 +129,13 @@ def test_parser(
         fn = load_function(code, "parse", "parser:test")
         df = to_frame(call_user(fn, "parser:test", path, ctx), "parser:test")
         elapsed = round((time.perf_counter() - t0) * 1000)
-        rows = frame_to_rows(df.head(5000), ctx["file_mtime"])
-        ts = [t for t, _ in rows if t]
+        ts = record_ts(df.head(5000), ctx["file_mtime"]).dropna()
         return {
             "ok": True,
             "elapsed_ms": elapsed,
             "has_ts": "_ts" in df.columns,
-            "ts_min": min(ts) if ts else None,
-            "ts_max": max(ts) if ts else None,
+            "ts_min": ts.min().to_pydatetime() if len(ts) else None,
+            "ts_max": ts.max().to_pydatetime() if len(ts) else None,
             "preview": frame_payload(df, 200),
         }
     except UserCodeError as e:
