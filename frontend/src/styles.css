@@ -1480,150 +1480,201 @@ body.resizing-row .flow-canvas {
 }
 
 /* ---------- motion ----------
-   과하지 않게: 짧게(120~320ms), 작게(이동 1~6px, 확대 2~4%), 반복은 '진행 중' 상태에만.
-   새로고침·페이지 이동 → 내용이 살짝 떠오르며 나타남 / hover → 살짝 떠오름 / click → 살짝 눌림 /
-   double click → 한 번 강조 / running → 은은한 호흡 / queued → 느린 깜빡임 / ok·error 로 바뀔 때 → 한 번 톡 */
+   눈에 띄되 거슬리지 않게: 길이 200~500ms, 이동 3~16px, 확대 4~10%, 반복은 '진행 중' 상태에만.
+   새로고침·페이지 이동 → 내용이 아래에서 떠오르며 차례로 나타남 / hover → 떠오르고 그림자·테두리 강조 /
+   click → 눌림 / double click → 퍼지는 테두리 + 살짝 튕김 (표 행은 파란 반짝임) /
+   running → 퍼지는 링 호흡 / queued → 느린 깜빡임 / ok·error 로 바뀔 때 → 튀어나오듯 한 번 */
 :root {
   --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
-  --ring: color-mix(in srgb, var(--blue) 32%, transparent);
+  --ease-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ring: color-mix(in srgb, var(--blue) 45%, transparent);
+  --ring-soft: color-mix(in srgb, var(--blue) 22%, transparent);
+  --lift-shadow: 0 10px 26px rgba(0, 23, 51, 0.13), 0 2px 6px rgba(0, 23, 51, 0.06);
 }
 
-/* 새로고침 · 페이지 이동: 첫 덩어리부터 30ms 간격으로 (최대 6개까지만 늦춤) */
+/* 새로고침 · 페이지 이동: 첫 덩어리부터 60ms 간격으로 (최대 6개까지만 늦춤) */
 .page > * {
-  animation: rise-in 300ms var(--ease-out) backwards;
+  animation: rise-in 480ms var(--ease-out) backwards;
 }
-.page > *:nth-child(2) { animation-delay: 30ms; }
-.page > *:nth-child(3) { animation-delay: 60ms; }
-.page > *:nth-child(4) { animation-delay: 90ms; }
-.page > *:nth-child(5) { animation-delay: 120ms; }
-.page > *:nth-child(n + 6) { animation-delay: 150ms; }
+.page > *:nth-child(2) { animation-delay: 60ms; }
+.page > *:nth-child(3) { animation-delay: 120ms; }
+.page > *:nth-child(4) { animation-delay: 180ms; }
+.page > *:nth-child(5) { animation-delay: 240ms; }
+.page > *:nth-child(n + 6) { animation-delay: 300ms; }
 @keyframes rise-in {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: none; }
 }
-/* 대시보드 위젯은 격자 배치가 transform 을 쓰므로 안쪽 내용만 흐리게 나타남 */
+/* 대시보드 위젯은 격자 배치가 transform 을 쓰므로 안쪽 내용만 나타남 */
 .dash-widget {
-  animation: fade-in 280ms var(--ease-out) backwards;
+  animation: fade-in 450ms var(--ease-out) backwards;
+}
+.dash-widget > * {
+  animation: rise-in 450ms var(--ease-out) backwards;
 }
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 .side-panel {
-  animation: panel-in 220ms var(--ease-out) backwards;
+  animation: panel-in 320ms var(--ease-out) backwards;
 }
 @keyframes panel-in {
-  from { opacity: 0; transform: translateX(10px); }
+  from { opacity: 0; transform: translateX(28px); }
   to { opacity: 1; transform: none; }
 }
 .agent-ev {
-  animation: rise-in 220ms var(--ease-out) backwards;
+  animation: rise-in 320ms var(--ease-out) backwards;
 }
 
-/* hover: 클릭할 수 있는 카드가 살짝 떠오름 / click: 살짝 눌림 */
+/* hover: 클릭할 수 있는 카드가 떠오르며 그림자와 파란 테두리 / click: 눌림 */
 .tile-click,
 .list-item,
 .agent-hist,
 .agent-chip,
 .palette-card {
-  transition: background 0.15s, border-color 0.15s, box-shadow 0.18s var(--ease-out), transform 0.18s var(--ease-out);
+  transition: background 0.18s, border-color 0.18s, box-shadow 0.22s var(--ease-out), transform 0.22s var(--ease-out);
 }
 .tile-click:hover,
 .list-item:hover,
 .agent-hist:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(0, 23, 51, 0.06);
+  transform: translateY(-3px);
+  box-shadow: var(--lift-shadow);
+  border-color: color-mix(in srgb, var(--blue) 35%, transparent);
+}
+.palette-card:hover,
+.agent-chip:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 23, 51, 0.1);
 }
 .tile-click:active,
 .list-item:active,
 .agent-hist:active,
 .agent-chip:active,
 .palette-card:active {
-  transform: scale(0.985);
+  transform: translateY(0) scale(0.97);
+  box-shadow: 0 2px 6px rgba(0, 23, 51, 0.08);
   transition-duration: 0.08s;
+}
+.ant-btn {
+  transition: all 0.2s var(--ease-out);
+}
+.ant-btn:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+.ant-btn-primary:not(:disabled):hover {
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--blue) 35%, transparent);
 }
 .ant-btn:not(:disabled):active,
 .rail-btn:active,
 .pill-tab:active,
 .big-tab:active {
-  transform: scale(0.97);
+  transform: scale(0.94);
+  transition-duration: 0.08s;
 }
 .rail-btn,
 .pill-tab,
 .big-tab {
-  transition: background 0.15s, color 0.15s, transform 0.12s var(--ease-out);
-}
-.rail-btn:hover .anticon {
-  transform: translateY(-1px);
+  transition: background 0.18s, color 0.18s, transform 0.15s var(--ease-out);
 }
 .rail-btn .anticon {
-  transition: transform 0.18s var(--ease-out);
+  transition: transform 0.25s var(--ease-back);
 }
-/* Flow 노드는 위치가 바뀌면 연결선 끝이 어긋나므로 움직이지 않고 그림자만 */
+.rail-btn:hover .anticon {
+  transform: translateY(-2px) scale(1.12);
+}
+/* 표 행: 마우스가 지나가면 배경이 부드럽게 바뀜 */
+.ant-table-tbody > tr > td {
+  transition: background 0.2s;
+}
+/* Flow 노드는 위치가 바뀌면 연결선 끝이 어긋나므로 움직이지 않고 그림자·테두리만 */
 .op-card {
-  transition: box-shadow 0.2s var(--ease-out), border-color 0.2s;
+  transition: box-shadow 0.22s var(--ease-out), border-color 0.22s;
 }
 .op-card:hover {
-  box-shadow: 0 6px 18px rgba(0, 23, 51, 0.1);
+  box-shadow: 0 10px 26px rgba(0, 23, 51, 0.16);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
 }
 
-/* double click: 한 번 퍼지는 테두리 (표 행은 배경이 한 번 반짝) */
+/* double click: 크게 퍼지는 테두리 + 살짝 튕김 (표 행은 파란 배경이 한 번 반짝) */
 .dbl-pulse {
-  animation: dbl-ring 420ms var(--ease-out);
+  animation: dbl-ring 520ms var(--ease-out), dbl-bounce 320ms var(--ease-back);
+}
+.op-card.dbl-pulse {
+  animation: dbl-ring 520ms var(--ease-out);
 }
 @keyframes dbl-ring {
   from { box-shadow: 0 0 0 0 var(--ring); }
-  to { box-shadow: 0 0 0 8px transparent; }
+  to { box-shadow: 0 0 0 16px transparent; }
+}
+@keyframes dbl-bounce {
+  0% { transform: scale(1); }
+  40% { transform: scale(0.96); }
+  100% { transform: scale(1); }
 }
 .ant-table-row.dbl-pulse {
   animation: none;
 }
 .ant-table-row.dbl-pulse > td {
-  animation: row-flash 480ms var(--ease-out);
+  animation: row-flash 700ms var(--ease-out);
 }
 @keyframes row-flash {
-  from { background: var(--blue-soft); }
-  to { background: transparent; }
+  0% { background: color-mix(in srgb, var(--blue) 28%, transparent); }
+  100% { background: transparent; }
 }
 
 /* 동작 상태 */
 .st {
-  transition: background-color 0.25s, color 0.25s;
+  transition: background-color 0.3s, color 0.3s;
 }
 .st-ok,
 .st-error,
 .st-warning {
-  animation: st-pop 260ms var(--ease-out);
+  animation: st-pop 420ms var(--ease-back);
 }
 @keyframes st-pop {
-  from { transform: scale(0.94); opacity: 0.4; }
-  to { transform: none; opacity: 1; }
+  0% { transform: scale(0.6); opacity: 0; }
+  100% { transform: none; opacity: 1; }
+}
+.st-error {
+  animation: st-pop 420ms var(--ease-back), st-shake 360ms ease-in-out 420ms;
+}
+@keyframes st-shake {
+  0%, 100% { transform: none; }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
 }
 .st-running {
-  animation: breathe 1.8s ease-in-out infinite;
+  animation: breathe 1.4s ease-out infinite;
 }
 @keyframes breathe {
-  0%, 100% { box-shadow: 0 0 0 0 transparent; }
-  50% { box-shadow: 0 0 0 3px var(--blue-soft); }
+  0% { box-shadow: 0 0 0 0 var(--ring); }
+  70% { box-shadow: 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
 }
 .st-queued {
-  animation: wait-blink 2.4s ease-in-out infinite;
+  animation: wait-blink 1.8s ease-in-out infinite;
 }
 @keyframes wait-blink {
-  50% { opacity: 0.55; }
+  50% { opacity: 0.35; }
 }
 .op-card.is-running {
-  animation: node-breathe 1.6s ease-in-out infinite;
+  animation: node-breathe 1.4s ease-out infinite;
+  border-color: var(--blue);
 }
 @keyframes node-breathe {
-  0%, 100% { box-shadow: 0 0 0 0 transparent; }
-  50% { box-shadow: 0 0 0 4px var(--ring); }
+  0% { box-shadow: 0 0 0 0 var(--ring); }
+  70% { box-shadow: 0 0 0 12px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.op-card.is-error {
+  animation: st-shake 360ms ease-in-out;
 }
 .op-card .chip {
-  animation: st-pop 240ms var(--ease-out);
+  animation: st-pop 380ms var(--ease-back);
 }
 .op-card .ofoot.err {
-  animation: fade-in 240ms var(--ease-out);
+  animation: rise-in 300ms var(--ease-out);
 }
 
 /* 움직임 줄이기를 켠 사용자: 애니메이션 없이 바로 */

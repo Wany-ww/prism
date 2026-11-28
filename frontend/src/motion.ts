@@ -15,7 +15,7 @@ export function installMotion() {
       void (el as HTMLElement).offsetWidth;
       el.classList.add('dbl-pulse');
       window.clearTimeout((el as any).__dblTimer);
-      (el as any).__dblTimer = window.setTimeout(() => el.classList.remove('dbl-pulse'), 500);
+      (el as any).__dblTimer = window.setTimeout(() => el.classList.remove('dbl-pulse'), 750);
     },
     true,
   );
