@@ -8,28 +8,36 @@
 #   -NoNeo4j        Neo4j/JDK 를 넣지 않음 (약 350MB 절약, 제품 계보 그래프 기능만 꺼짐)
 #   -Zip            zip 파일도 만듦
 #   -SkipPrepare    prepare-runtime.ps1 을 건너뜀 (이미 준비된 .runtime 사용)
-param([string]$Out = '', [switch]$WithSettings, [switch]$NoNeo4j, [switch]$Zip, [switch]$SkipPrepare)
+#   -Tag            zip 이름과 VERSION.txt 에 붙일 표시 (예: 커밋 해시, release.ps1 이 사용)
+param([string]$Out = '', [switch]$WithSettings, [switch]$NoNeo4j, [switch]$Zip, [switch]$SkipPrepare, [string]$Tag = '')
 . "$PSScriptRoot\common.ps1"
 
 if (-not $SkipPrepare) { & (Join-Path $PSScriptRoot 'prepare-runtime.ps1') }
+
+# Rust 결과물: 서버가 실행 중이면 backend\app\prism_core.pyd 를 바꿀 수 없으므로 native\target 쪽이 더 새로우면 그것을 씀
+function Get-Newest([string[]]$paths) {
+    $paths | Where-Object { Test-Path $_ } | Sort-Object { (Get-Item $_).LastWriteTime } -Descending | Select-Object -First 1
+}
+$enginePath = Get-Newest @((Join-Path $Backend 'app\prism_core.pyd'), (Join-Path $Root 'native\target\release\prism_core.dll'))
+$agentPath = Get-Newest @((Join-Path $Root 'agent\prism-agent.exe'), (Join-Path $Root 'native\target\release\prism-agent.exe'))
 
 # 배포에 꼭 필요한 빌드 결과물 (-SkipPrepare 면 prepare-runtime 을 건너뛰므로 여기서 확인)
 $required = @{
     '.runtime\python\python.exe' = 'Python 런타임'
     '.runtime\wheels' = '패키지 원본(wheel)'
-    'backend\app\prism_core.pyd' = 'Rust 엔진'
-    'agent\prism-agent.exe' = '게이트웨이 에이전트'
     'frontend\dist\index.html' = '화면 빌드'
 }
-$missing = $required.Keys | Where-Object { -not (Test-Path (Join-Path $Root $_)) }
+$missing = @($required.Keys | Where-Object { -not (Test-Path (Join-Path $Root $_)) } | ForEach-Object { "$_ ($($required[$_]))" })
+if (-not $enginePath) { $missing += 'backend\app\prism_core.pyd (Rust 엔진)' }
+if (-not $agentPath) { $missing += 'agent\prism-agent.exe (게이트웨이 에이전트)' }
 if ($missing) {
-    throw ("배포에 필요한 파일이 없습니다: " + (($missing | ForEach-Object { "$_ ($($required[$_]))" }) -join ', ') + '. -SkipPrepare 없이 실행하세요.')
+    throw ("배포에 필요한 파일이 없습니다: " + ($missing -join ', ') + '. -SkipPrepare 없이 실행하세요.')
 }
 & (Join-Path $Runtime 'python\python.exe') -c 'import fastapi, uvicorn, sqlalchemy, pandas, numpy, psycopg, paramiko, neo4j' 2>$null
 if ($LASTEXITCODE -ne 0) { throw '.runtime\python 에 패키지가 다 설치되어 있지 않습니다. -SkipPrepare 없이 실행하세요.' }
 # 소스가 빌드보다 새로우면 예전 결과물이 들어가므로 알림
 function Test-Newer([string]$built, [string[]]$sources) {
-    $t = (Get-Item (Join-Path $Root $built)).LastWriteTime
+    $t = (Get-Item $built).LastWriteTime
     foreach ($s in $sources) {
         $p = Join-Path $Root $s
         if ((Test-Path $p) -and (Get-ChildItem $p -Recurse -File | Where-Object { $_.FullName -notmatch '\\target\\' -and $_.LastWriteTime -gt $t } | Select-Object -First 1)) { return $true }
@@ -37,9 +45,9 @@ function Test-Newer([string]$built, [string[]]$sources) {
     return $false
 }
 $stale = @()
-if (Test-Newer 'backend\app\prism_core.pyd' @('native\prism_core', 'native\Cargo.toml')) { $stale += 'Rust 엔진 (native\prism_core)' }
-if (Test-Newer 'agent\prism-agent.exe' @('native\prism_agent')) { $stale += '게이트웨이 에이전트 (native\prism_agent)' }
-if (Test-Newer 'frontend\dist\index.html' @('frontend\src')) { $stale += '화면 (frontend\src)' }
+if (Test-Newer $enginePath @('native\prism_core', 'native\Cargo.toml')) { $stale += 'Rust 엔진 (native\prism_core)' }
+if (Test-Newer $agentPath @('native\prism_agent')) { $stale += '게이트웨이 에이전트 (native\prism_agent)' }
+if (Test-Newer (Join-Path $Root 'frontend\dist\index.html') @('frontend\src')) { $stale += '화면 (frontend\src)' }
 if ($stale) {
     if ($SkipPrepare) { throw ("소스가 빌드 결과보다 새롭습니다: " + ($stale -join ', ') + '. -SkipPrepare 없이 실행하거나 먼저 다시 빌드하세요.') }
     else { Write-Warn2 ("소스가 빌드 결과보다 새롭습니다: " + ($stale -join ', ')) }
@@ -62,7 +70,8 @@ Copy-Item (Join-Path $Backend 'requirements.txt') (Join-Path $Out 'backend')
 Copy-Tree (Join-Path $Root 'scripts') (Join-Path $Out 'scripts')
 Copy-Tree (Join-Path $Root 'frontend\dist') (Join-Path $Out 'frontend\dist')
 New-Item -ItemType Directory -Force (Join-Path $Out 'agent') | Out-Null
-Copy-Item (Join-Path $Root 'agent\prism-agent.exe') (Join-Path $Out 'agent')
+Copy-Item $agentPath (Join-Path $Out 'agent\prism-agent.exe')
+Copy-Item $enginePath (Join-Path $Out 'backend\app\prism_core.pyd') -Force
 if (Test-Path (Join-Path $Root 'demo')) { Copy-Tree (Join-Path $Root 'demo') (Join-Path $Out 'demo') }
 if (Test-Path (Join-Path $Root '.claude\skills')) { Copy-Tree (Join-Path $Root '.claude\skills') (Join-Path $Out '.claude\skills') }
 Write-Ok 'backend, frontend\dist, agent, scripts'
@@ -103,11 +112,16 @@ if ($WithSettings) {
     Write-Ok 'settings\ (새 서버 install 때 자동으로 들여옴)'
 }
 
+# 어떤 소스로 만든 배포본인지
+$commit = (git -C $Root rev-parse --short HEAD 2>$null)
+@("PRISM release", "built: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')", "commit: $commit", "tag: $Tag") | Set-Content (Join-Path $Out 'VERSION.txt') -Encoding UTF8
+
 $size = (Get-ChildItem $Out -Recurse -File | Measure-Object Length -Sum).Sum / 1MB
 Write-Host ''
 Write-Host ("배포 폴더: {0}  ({1:N0} MB)" -f $Out, $size) -ForegroundColor Green
 if ($Zip) {
-    $zipPath = Join-Path (Split-Path $Out -Parent) ("PRISM-{0:yyyyMMdd}.zip" -f (Get-Date))
+    $zipName = if ($Tag) { "PRISM-{0:yyyyMMdd}-{1}.zip" -f (Get-Date), $Tag } else { "PRISM-{0:yyyyMMdd}.zip" -f (Get-Date) }
+    $zipPath = Join-Path (Split-Path $Out -Parent) $zipName
     if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
     & tar.exe -a -c -f $zipPath -C (Split-Path $Out -Parent) (Split-Path $Out -Leaf)
     if ($LASTEXITCODE -ne 0) { throw 'zip failed' }

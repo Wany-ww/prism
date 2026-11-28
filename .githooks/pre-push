@@ -1,0 +1,20 @@
+#!/bin/sh
+# PRISM: main 브랜치를 푸시하면 배포 버전(dist\PRISM + dist\PRISM-날짜-커밋.zip)을 백그라운드로 다시 만든다.
+#   scripts/release.ps1 이 푸시 완료를 확인한 뒤 build-bundle.ps1 -SkipPrepare -Zip 을 실행 (로그: logs/release.log)
+#   이번만 건너뛰기: PRISM_NO_RELEASE=1 git push
+#   설치: powershell -File scripts/install-hooks.ps1  (.githooks/pre-push 를 .git/hooks 로 복사)
+[ "$PRISM_NO_RELEASE" = "1" ] && exit 0
+sha=""
+while read local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main)
+      [ "$local_sha" != "0000000000000000000000000000000000000000" ] && sha="$local_sha" ;;
+  esac
+done
+[ -n "$sha" ] || exit 0
+root=$(git rev-parse --show-toplevel)
+script=$(cygpath -w "$root/scripts/release.ps1" 2>/dev/null || echo "$root/scripts/release.ps1")
+# 창 없이 따로 띄워 push 를 기다리게 하지 않음 (ShellExecute 라 출력 핸들도 물려주지 않음)
+powershell.exe -NoProfile -NonInteractive -Command "Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','\"$script\"','-Sha','$sha'" >/dev/null 2>&1
+echo "PRISM: release bundle build started in background for ${sha%"${sha#???????}"} (logs/release.log)"
+exit 0

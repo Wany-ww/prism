@@ -9,6 +9,9 @@ import 'react-resizable/css/styles.css';
 import './styles.css';
 import App from './App';
 import { ThemeProvider } from './theme';
+import { installMotion } from './motion';
+
+installMotion();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

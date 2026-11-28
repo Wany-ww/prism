@@ -22,7 +22,12 @@ if (Test-Path (Join-Path $native 'vendor')) { $cargoArgs += '--offline' }
 if ($LASTEXITCODE -ne 0) { throw "cargo build failed ($LASTEXITCODE)" }
 
 $out = Join-Path $native "target\$profile"
-# 실행 중인 서버가 .pyd 를 쥐고 있으면 덮어쓸 수 없으므로 먼저 stop.bat 으로 멈춰야 함
-Copy-Item (Join-Path $out 'prism_core.dll') (Join-Path $root 'backend\app\prism_core.pyd') -Force
-Copy-Item (Join-Path $out 'prism-agent.exe') (Join-Path $root 'agent\prism-agent.exe') -Force
-Write-Host "built: backend\app\prism_core.pyd, agent\prism-agent.exe ($profile)"
+# 실행 중인 서버가 .pyd 를 쥐고 있으면 덮어쓸 수 없음 → 경고만 (배포 빌드는 native\target 결과를 직접 씀)
+foreach ($pair in @(@('prism_core.dll', 'backend\app\prism_core.pyd'), @('prism-agent.exe', 'agent\prism-agent.exe'))) {
+    try {
+        Copy-Item (Join-Path $out $pair[0]) (Join-Path $root $pair[1]) -Force -ErrorAction Stop
+        Write-Host "built: $($pair[1]) ($profile)"
+    } catch {
+        Write-Warning "$($pair[1]) 를 바꾸지 못했습니다 (실행 중인 서버가 사용 중). stop.bat 후 다시 빌드하면 바뀝니다. 빌드 결과는 native\target\$profile 에 있습니다."
+    }
+}

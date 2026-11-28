@@ -23,7 +23,7 @@ const EXAMPLES = [
 ];
 
 const STATUS: Record<AiJob['status'], { label: string; cls: string }> = {
-  queued: { label: 'Queued', cls: 'st-idle' },
+  queued: { label: 'Queued', cls: 'st-idle st-queued' },
   running: { label: 'Working', cls: 'st-running' },
   done: { label: 'Done', cls: 'st-ok' },
   error: { label: 'Failed', cls: 'st-error' },

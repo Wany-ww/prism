@@ -1478,3 +1478,162 @@ body.resizing-row .flow-canvas {
 .section-divider.ant-divider-horizontal.ant-divider-with-text::after {
   border-block-start-color: var(--text-4);
 }
+
+/* ---------- motion ----------
+   과하지 않게: 짧게(120~320ms), 작게(이동 1~6px, 확대 2~4%), 반복은 '진행 중' 상태에만.
+   새로고침·페이지 이동 → 내용이 살짝 떠오르며 나타남 / hover → 살짝 떠오름 / click → 살짝 눌림 /
+   double click → 한 번 강조 / running → 은은한 호흡 / queued → 느린 깜빡임 / ok·error 로 바뀔 때 → 한 번 톡 */
+:root {
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ring: color-mix(in srgb, var(--blue) 32%, transparent);
+}
+
+/* 새로고침 · 페이지 이동: 첫 덩어리부터 30ms 간격으로 (최대 6개까지만 늦춤) */
+.page > * {
+  animation: rise-in 300ms var(--ease-out) backwards;
+}
+.page > *:nth-child(2) { animation-delay: 30ms; }
+.page > *:nth-child(3) { animation-delay: 60ms; }
+.page > *:nth-child(4) { animation-delay: 90ms; }
+.page > *:nth-child(5) { animation-delay: 120ms; }
+.page > *:nth-child(n + 6) { animation-delay: 150ms; }
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+/* 대시보드 위젯은 격자 배치가 transform 을 쓰므로 안쪽 내용만 흐리게 나타남 */
+.dash-widget {
+  animation: fade-in 280ms var(--ease-out) backwards;
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.side-panel {
+  animation: panel-in 220ms var(--ease-out) backwards;
+}
+@keyframes panel-in {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: none; }
+}
+.agent-ev {
+  animation: rise-in 220ms var(--ease-out) backwards;
+}
+
+/* hover: 클릭할 수 있는 카드가 살짝 떠오름 / click: 살짝 눌림 */
+.tile-click,
+.list-item,
+.agent-hist,
+.agent-chip,
+.palette-card {
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.18s var(--ease-out), transform 0.18s var(--ease-out);
+}
+.tile-click:hover,
+.list-item:hover,
+.agent-hist:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 23, 51, 0.06);
+}
+.tile-click:active,
+.list-item:active,
+.agent-hist:active,
+.agent-chip:active,
+.palette-card:active {
+  transform: scale(0.985);
+  transition-duration: 0.08s;
+}
+.ant-btn:not(:disabled):active,
+.rail-btn:active,
+.pill-tab:active,
+.big-tab:active {
+  transform: scale(0.97);
+}
+.rail-btn,
+.pill-tab,
+.big-tab {
+  transition: background 0.15s, color 0.15s, transform 0.12s var(--ease-out);
+}
+.rail-btn:hover .anticon {
+  transform: translateY(-1px);
+}
+.rail-btn .anticon {
+  transition: transform 0.18s var(--ease-out);
+}
+/* Flow 노드는 위치가 바뀌면 연결선 끝이 어긋나므로 움직이지 않고 그림자만 */
+.op-card {
+  transition: box-shadow 0.2s var(--ease-out), border-color 0.2s;
+}
+.op-card:hover {
+  box-shadow: 0 6px 18px rgba(0, 23, 51, 0.1);
+}
+
+/* double click: 한 번 퍼지는 테두리 (표 행은 배경이 한 번 반짝) */
+.dbl-pulse {
+  animation: dbl-ring 420ms var(--ease-out);
+}
+@keyframes dbl-ring {
+  from { box-shadow: 0 0 0 0 var(--ring); }
+  to { box-shadow: 0 0 0 8px transparent; }
+}
+.ant-table-row.dbl-pulse {
+  animation: none;
+}
+.ant-table-row.dbl-pulse > td {
+  animation: row-flash 480ms var(--ease-out);
+}
+@keyframes row-flash {
+  from { background: var(--blue-soft); }
+  to { background: transparent; }
+}
+
+/* 동작 상태 */
+.st {
+  transition: background-color 0.25s, color 0.25s;
+}
+.st-ok,
+.st-error,
+.st-warning {
+  animation: st-pop 260ms var(--ease-out);
+}
+@keyframes st-pop {
+  from { transform: scale(0.94); opacity: 0.4; }
+  to { transform: none; opacity: 1; }
+}
+.st-running {
+  animation: breathe 1.8s ease-in-out infinite;
+}
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 0 3px var(--blue-soft); }
+}
+.st-queued {
+  animation: wait-blink 2.4s ease-in-out infinite;
+}
+@keyframes wait-blink {
+  50% { opacity: 0.55; }
+}
+.op-card.is-running {
+  animation: node-breathe 1.6s ease-in-out infinite;
+}
+@keyframes node-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 0 4px var(--ring); }
+}
+.op-card .chip {
+  animation: st-pop 240ms var(--ease-out);
+}
+.op-card .ofoot.err {
+  animation: fade-in 240ms var(--ease-out);
+}
+
+/* 움직임 줄이기를 켠 사용자: 애니메이션 없이 바로 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}

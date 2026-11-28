@@ -62,7 +62,10 @@ function OpNodeView({ id, data, selected }: NodeProps<OpNode>) {
   const color = nodeColor(data, ctx.nodeTypes);
   const bodyIndent = ins.some((h) => h.label) ? 48 : 14;
   return (
-    <div className={`op-card ${selected ? 'selected' : ''} ${data.disabled ? 'disabled' : ''}`} style={{ ['--c' as any]: color }}>
+    <div
+      className={`op-card ${selected ? 'selected' : ''} ${data.disabled ? 'disabled' : ''} ${running ? 'is-running' : st?.status === 'error' ? 'is-error' : ''}`}
+      style={{ ['--c' as any]: color }}
+    >
       {ins.map((h, i) => {
         const top = `${((i + 1) / (ins.length + 1)) * 100}%`;
         return (

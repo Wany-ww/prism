@@ -46,6 +46,8 @@ Capture ──▶ Match ──▶ Analysis ──▶ Present
 .\scripts\build-bundle.ps1 -NoNeo4j        # Neo4j/JDK 제외 (약 350MB 절약)
 ```
 
+**푸시하면 자동으로**: `main` 을 푸시하면 git `pre-push` 훅이 `scripts\release.ps1` 을 백그라운드로 실행합니다. 푸시가 끝난 것을 확인한 뒤, 소스가 바뀐 화면·Rust 엔진만 인터넷 없이 다시 빌드하고 `build-bundle.ps1 -SkipPrepare -Zip` 으로 `dist\PRISM\` 과 `dist\PRISM-날짜-커밋.zip` 을 만듭니다 (zip 은 최근 5개만 보관, 배포 폴더에 `VERSION.txt`). 로그는 `logs\release.log`, 결과 한 줄 요약은 `logs\release-history.log`. 처음 한 번 `.\scripts\install-hooks.ps1` 로 훅을 설치하고, 이번만 건너뛰려면 `PRISM_NO_RELEASE=1` 로 푸시합니다. `-SkipPrepare` 를 쓰므로 그 전에 한 번은 옵션 없이 `build-bundle.ps1` 을 실행해 `.runtime\` 을 준비해 두어야 합니다.
+
 `scripts\prepare-runtime.ps1` 이 먼저 실행되어 `.runtime\` 을 준비합니다: 이식형 Python 3.11 + 패키지(`.runtime\python`), 패키지 원본 wheel(`.runtime\wheels`, 폐쇄망에서 재설치용), PostgreSQL 바이너리(`.runtime\pgsql`), Rust 엔진/에이전트 빌드, 화면 빌드. 배포 폴더에는 DB·수집 데이터(`backend\data`)와 비밀번호(`backend\.env`)가 들어가지 않습니다. 크기는 Neo4j 제외 약 380MB 입니다.
 
 ### 개발 모드
@@ -321,7 +323,8 @@ backend/app/
   engine/native.py  Rust 엔진(prism_core) ↔ pandas 연결
 native/         Rust 소스: prism_core (저장·CSV 파서·매칭, Python 확장 모듈), prism_agent (게이트웨이 에이전트 exe)
 agent/          prism-agent.exe (빌드 결과)
-scripts/        install / run / stop / build-bundle / prepare-runtime / build-native
+scripts/        install / run / stop / firewall / build-bundle / prepare-runtime / build-native / release / install-hooks
+.githooks/      pre-push (main 푸시 → 배포 버전 자동 빌드)
 .claude/skills/prism-builder/  매칭 → 분석 → 대시보드 생성 스킬 (SKILL.md, reference/, scripts/prism.py)
 frontend/src/   React + Ant Design + React Flow + ECharts (토스증권 데스크탑 스타일, 라이트/다크 모드)
 ```
