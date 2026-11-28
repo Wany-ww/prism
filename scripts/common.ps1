@@ -11,6 +11,8 @@ $PgHome = Join-Path $Runtime 'pgsql'
 $PgBin = Join-Path $PgHome 'bin'
 $PgData = Join-Path $Backend 'data\postgres'
 $SettingsDir = Join-Path $Root 'settings'
+# Windows 기본 tar(bsdtar, zip 지원). git 훅 안처럼 Git 의 GNU tar 가 PATH 앞에 오면 'C:' 를 원격 호스트로 읽어 실패하므로 경로를 고정
+$Tar = Join-Path $env:SystemRoot 'System32\tar.exe'
 # Python 이 한글 경로·출력을 UTF-8 로 다루도록
 $env:PYTHONUTF8 = '1'
 $env:PYTHONIOENCODING = 'utf-8'

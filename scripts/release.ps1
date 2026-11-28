@@ -49,10 +49,16 @@ try {
             try { npm run build; if ($LASTEXITCODE -ne 0) { throw 'npm run build failed' } } finally { Pop-Location }
         } else { throw '화면 소스가 빌드보다 새로운데 npm/node_modules 가 없습니다.' }
     }
-    $rs = Get-ChildItem (Join-Path $Root 'native') -Recurse -File -Include *.rs, Cargo.toml, Cargo.lock | Where-Object { $_.FullName -notmatch '\\target\\' }
-    $built = @((Join-Path $Root 'native\target\release\prism_core.dll'), (Join-Path $Root 'native\target\release\prism-agent.exe'))
-    $oldest = $built | ForEach-Object { if (Test-Path $_) { (Get-Item $_).LastWriteTime } else { [datetime]::MinValue } } | Sort-Object | Select-Object -First 1
-    if ($rs | Where-Object { $_.LastWriteTime -gt $oldest } | Select-Object -First 1) {
+    # 결과물마다 자기 소스와 비교 (설치본과 native\target 중 더 새로운 것 기준)
+    function Test-RustStale([string[]]$outputs, [string[]]$sources) {
+        $t = $outputs | Where-Object { Test-Path $_ } | ForEach-Object { (Get-Item $_).LastWriteTime } | Sort-Object -Descending | Select-Object -First 1
+        if (-not $t) { return $true }
+        return [bool]($sources | Where-Object { Test-Path $_ } | ForEach-Object { Get-ChildItem $_ -Recurse -File } | Where-Object { $_.LastWriteTime -gt $t } | Select-Object -First 1)
+    }
+    $n = Join-Path $Root 'native'
+    $coreStale = Test-RustStale @((Join-Path $Backend 'app\prism_core.pyd'), "$n\target\release\prism_core.dll") @("$n\prism_core", "$n\Cargo.toml")
+    $agentStale = Test-RustStale @((Join-Path $Root 'agent\prism-agent.exe'), "$n\target\release\prism-agent.exe") @("$n\prism_agent")
+    if ($coreStale -or $agentStale) {
         if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { throw 'Rust 소스가 빌드보다 새로운데 cargo 가 없습니다.' }
         Write-Step 'Native build (Rust)'
         & (Join-Path $PSScriptRoot 'build-native.ps1')

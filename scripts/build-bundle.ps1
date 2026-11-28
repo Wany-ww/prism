@@ -123,7 +123,7 @@ if ($Zip) {
     $zipName = if ($Tag) { "PRISM-{0:yyyyMMdd}-{1}.zip" -f (Get-Date), $Tag } else { "PRISM-{0:yyyyMMdd}.zip" -f (Get-Date) }
     $zipPath = Join-Path (Split-Path $Out -Parent) $zipName
     if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-    & tar.exe -a -c -f $zipPath -C (Split-Path $Out -Parent) (Split-Path $Out -Leaf)
+    & $Tar -a -c -f $zipPath -C (Split-Path $Out -Parent) (Split-Path $Out -Leaf)
     if ($LASTEXITCODE -ne 0) { throw 'zip failed' }
     Write-Host ("zip: {0}  ({1:N0} MB)" -f $zipPath, ((Get-Item $zipPath).Length / 1MB)) -ForegroundColor Green
 }

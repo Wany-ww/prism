@@ -56,7 +56,7 @@ if (-not (Test-Path (Join-Path $pgHome 'bin\postgres.exe'))) {
     $tmp = Join-Path $root '.runtime\pgsql-extract'
     if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
     New-Item -ItemType Directory $tmp | Out-Null
-    tar -xf $Zip -C $tmp
+    & (Join-Path $env:SystemRoot 'System32\tar.exe') -xf $Zip -C $tmp
     if ($LASTEXITCODE -ne 0) { throw 'Extraction failed' }
     Move-Item (Join-Path $tmp 'pgsql') $pgHome
     Remove-Item $tmp -Recurse -Force

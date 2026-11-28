@@ -60,7 +60,7 @@ else {
         $tmp = Join-Path $Runtime 'pgsql-extract'
         if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
         New-Item -ItemType Directory $tmp | Out-Null
-        & tar.exe -xf $zip.FullName -C $tmp
+        & $Tar -xf $zip.FullName -C $tmp
         if ($LASTEXITCODE -ne 0) { throw 'Extraction failed' }
         Move-Item (Join-Path $tmp 'pgsql') $PgHome
         Remove-Item $tmp -Recurse -Force
