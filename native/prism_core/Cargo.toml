@@ -1,0 +1,28 @@
+[package]
+name = "prism_core"
+description = "PRISM native engine: parquet storage, CSV parsing and the match engine (Python extension module)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "prism_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+# abi3: Python 3.11 이상 어떤 버전에서도 같은 .pyd 를 그대로 사용
+pyo3 = { version = "0.30", features = ["extension-module", "abi3-py311", "generate-import-lib"] }
+numpy = "0.30"
+arrow-array = "60"
+arrow-buffer = "60"
+arrow-schema = "60"
+arrow-select = "60"
+arrow-cast = { version = "60", default-features = false }
+# C 라이브러리 없이 순수 Rust 코덱만 (snappy: pyarrow 기본 압축과 같아 기존 파일도 그대로 읽힘)
+parquet = { version = "60", default-features = false, features = ["arrow", "snap"] }
+csv = "1.4"
+encoding_rs = "0.8"
+rayon = "1.12"
+rustc-hash = "2"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+mimalloc = { version = "0.1", default-features = false }

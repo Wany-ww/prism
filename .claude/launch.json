@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "backend",
-      "runtimeExecutable": "backend/.venv/Scripts/python.exe",
+      "runtimeExecutable": ".runtime/python/python.exe",
       "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--host", "0.0.0.0", "--port", "8000"],
       "port": 8000
     },
@@ -12,6 +12,12 @@
       "runtimeExecutable": "powershell",
       "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts/neo4j.ps1"],
       "port": 7474
+    },
+    {
+      "name": "postgres",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "scripts/postgres.ps1"],
+      "port": 5432
     },
     {
       "name": "frontend",

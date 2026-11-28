@@ -126,6 +126,41 @@ export type GraphStatus = {
   graphs?: { graph: string; product_key: string; resources: string[]; updated_at: string; products: number }[];
 };
 
+// ---- AI Agent ----
+export type AiAgent = {
+  id: string;
+  name: string;
+  vendor: string;
+  kind: 'local-cli' | 'download';
+  temporary: boolean;
+  description: string;
+  installed: boolean;
+  version: string | null;
+  downloadable: boolean;
+  available: boolean;
+  started: boolean;
+  busy: boolean;
+  error: string;
+};
+export type AiEvent = { t: string; kind: 'info' | 'text' | 'tool' | 'error' | 'created'; text: string; what?: 'flow' | 'dashboard'; id?: number; action?: string };
+export type AiMade = { id: number; name: string; action: 'created' | 'updated'; kind?: FlowKind; slug?: string };
+export type AiJob = {
+  id: number;
+  agent: string;
+  prompt: string;
+  status: 'queued' | 'running' | 'done' | 'error' | 'cancelled';
+  started_at: string;
+  finished_at: string | null;
+  error: string;
+  result: { summary?: string; cost_usd?: number; turns?: number; duration_ms?: number; flows?: AiMade[]; dashboards?: AiMade[] };
+  events?: AiEvent[];
+  event_count?: number;
+};
+
+// ---- 설정 묶음 (서버 이전) ----
+export type ImportItem = { type: string; name: string; action: 'create' | 'overwrite' | 'skip'; warnings: string[] };
+export type ImportReport = { dry_run: boolean; summary: Record<string, number>; items: ImportItem[]; notes: string[] };
+
 export type Outcome = { stage: string; field: string; value: string; bad: boolean };
 export type ImpactItem = {
   product: string;

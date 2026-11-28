@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from .config import DATABASE_URL
 
@@ -9,7 +10,21 @@ engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False, "timeout": 30} if _is_sqlite else {},
     pool_pre_ping=True,
+    # PostgreSQL: API 프로세스 + 수집/Flow 작업 프로세스가 각자 풀을 가지므로 프로세스당 연결 수를 제한
+    **({} if _is_sqlite else {"pool_size": 5, "max_overflow": 10, "pool_recycle": 1800}),
 )
+
+if not _is_sqlite:
+
+    @event.listens_for(Session, "before_flush")
+    def _strip_nul(session, _ctx, _instances):
+        """PostgreSQL 문자열에는 NUL(\\x00)을 넣을 수 없다 — 바이너리 파일 파싱 오류 메시지 등에 섞여 들어오면 저장 전에 제거."""
+        for obj in (*session.new, *session.dirty):
+            for attr in sa_inspect(obj).mapper.column_attrs:
+                v = obj.__dict__.get(attr.key)
+                if isinstance(v, str) and "\x00" in v:
+                    setattr(obj, attr.key, v.replace("\x00", ""))
+
 
 if _is_sqlite:
 
@@ -46,8 +61,11 @@ def ensure_columns():
                 default = getattr(col.default, "arg", None)
                 if isinstance(default, str):
                     ddl += " DEFAULT '" + default.replace("'", "''") + "'"
-                elif isinstance(default, (bool, int, float)):
-                    ddl += f" DEFAULT {int(default) if isinstance(default, bool) else default}"
+                elif isinstance(default, bool):
+                    # PostgreSQL 의 boolean 은 1/0 을 받지 않음 (SQLite 3.23+ 도 TRUE/FALSE 를 이해함)
+                    ddl += f" DEFAULT {'TRUE' if default else 'FALSE'}"
+                elif isinstance(default, (int, float)):
+                    ddl += f" DEFAULT {default}"
                 if not col.nullable and default is not None and not callable(default):
                     ddl += " NOT NULL"
                 conn.execute(text(ddl))

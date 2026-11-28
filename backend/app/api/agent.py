@@ -1,7 +1,7 @@
 """별도 LAN 설비용 Agent(push) API.
 
-게이트웨이 PC(대표 설비 PC, 작업 PC 등)에서 agent/prism_agent.py 를 실행하면
-서버에서 설정을 받아 로그 파일을 찾아 변경된 파일만 업로드한다.
+게이트웨이 PC(대표 설비 PC, 작업 PC 등)에서 prism-agent.exe(Rust, 설치 불필요)를 실행하면
+서버에서 설정을 받아 로그 파일을 찾아 변경된 파일만 업로드한다. 실행 파일은 화면(설비 설정)에서 내려받는다.
 """
 
 import os
@@ -10,17 +10,26 @@ import tempfile
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..capture.fetchers import DATE_FOLDER_DEPTH, candidate_locations, day_keys, render
 from ..capture.service import parser_hash
-from ..config import AGENT_TOKEN, STAGING_DIR
+from ..config import AGENT_EXE, AGENT_TOKEN, STAGING_DIR
 from ..db import get_db
 from ..models import CapturedFile, Equipment
 from ..scheduler import scheduler
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
+
+
+@router.get("/download")
+def agent_download():
+    """게이트웨이 PC 용 수집 에이전트 실행 파일 (Windows x64, 설치 불필요)."""
+    if not AGENT_EXE.exists():
+        raise HTTPException(404, "agent/prism-agent.exe is not built on this server (scripts\\build-native.ps1).")
+    return FileResponse(AGENT_EXE, media_type="application/octet-stream", filename="prism-agent.exe")
 
 
 def _auth(token: str | None):

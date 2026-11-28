@@ -1,0 +1,17 @@
+[package]
+name = "prism_agent"
+description = "PRISM gateway agent: finds equipment log files on a separate LAN and uploads them to the PRISM server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "prism-agent"
+path = "src/main.rs"
+
+[dependencies]
+# 사내망 http 전용 (TLS 라이브러리를 넣지 않아 C 컴파일 없이 빌드되고 실행 파일이 작음)
+ureq = { version = "3", default-features = false, features = ["json"] }
+serde_json = "1"
+glob = "0.3"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }

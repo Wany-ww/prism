@@ -1,8 +1,9 @@
-import { Alert, AutoComplete, Button, Col, Divider, Form, Input, InputNumber, Modal, Radio, Row, Select, Space, Switch, Typography } from 'antd';
+import { Alert, AutoComplete, Button, Col, Divider, Form, Input, InputNumber, Modal, Radio, Row, Select, Slider, Space, Switch, Tooltip, Typography, Upload } from 'antd';
 import type { DefaultOptionType } from 'antd/es/select';
-import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, MinusCircleOutlined, PictureOutlined, PlusOutlined } from '@ant-design/icons';
 import { useMemo, useState } from 'react';
 import type { Dataset } from '../api';
+import { AXIS_BG_KINDS, BG_DEFAULTS, bgUnit, BgUnit, ChartBackground, dataUrlBytes, readImageFile } from './background';
 import { ChartKind, neededColumns } from './charts';
 import { Layer, paramIdOf, paramToken } from './link';
 import { canHighlight, ControlOption, Widget } from './Widget';
@@ -349,6 +350,8 @@ export default function WidgetEditor({
                 )}
               </>
             )}
+            <Divider style={{ margin: '4px 0 14px' }} />
+            <BackgroundForm kind={kind} value={chart.background} onChange={(background) => setChart({ background })} />
           </>
         )}
         {w.type === 'table' && (
@@ -518,5 +521,135 @@ export default function WidgetEditor({
         )}
       </Form>
     </Modal>
+  );
+}
+
+/** 차트 배경 이미지: 이미지 선택, 투명도, 시작 좌표·크기 (차트 영역 % 또는 축 값) */
+function BackgroundForm({ kind, value: bg, onChange }: { kind: ChartKind; value?: ChartBackground; onChange: (v: ChartBackground | undefined) => void }) {
+  const [err, setErr] = useState('');
+  const axisOk = AXIS_BG_KINDS.includes(kind);
+  const unit: BgUnit = bg ? bgUnit(bg, kind) : 'percent';
+  const pct = unit === 'percent';
+  const set = (p: Partial<ChartBackground>) => bg && onChange({ ...bg, ...p });
+  const pick = (file: File) => {
+    setErr('');
+    readImageFile(file)
+      // 이미지만 바꾸면 위치·투명도 설정은 그대로 둠
+      .then((img) => onChange({ ...BG_DEFAULTS, ...bg, ...img }))
+      .catch((e) => setErr(e.message));
+    return false;
+  };
+  // % 와 축 값은 단위가 달라 좌표를 그대로 옮길 수 없음 → 방식을 바꾸면 좌표를 초기화
+  const setUnit = (u: BgUnit) => set(u === 'percent' ? { unit: u, x: 0, y: 0, w: 100, h: 100 } : { unit: u, x: null, y: null, w: null, h: null });
+  const chooser = (label: string, icon = <PictureOutlined />) => (
+    <Upload accept="image/*" showUploadList={false} beforeUpload={pick}>
+      <Button size="small" icon={icon}>
+        {label}
+      </Button>
+    </Upload>
+  );
+
+  return (
+    <Form.Item
+      label="Background image"
+      extra={!bg ? '도면·지그·트레이 사진 등을 차트 뒤에 깔아 측정 위치와 겹쳐 볼 수 있어요. 큰 이미지는 긴 변 2000px 로 줄여 대시보드에 함께 저장됩니다.' : undefined}
+      validateStatus={err ? 'error' : undefined}
+      help={err || undefined}
+    >
+      {!bg ? (
+        chooser('Choose image')
+      ) : (
+        <div className="layer-box" style={{ marginBottom: 0, padding: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+            <div className="bg-thumb">
+              <img src={bg.src} alt="" style={{ opacity: bg.opacity ?? BG_DEFAULTS.opacity }} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="ellipsis" style={{ fontWeight: 600 }}>
+                {bg.name || 'Image'}
+              </div>
+              <div className="muted num" style={{ fontSize: 12 }}>
+                {bg.iw && bg.ih ? `${bg.iw} × ${bg.ih}px · ` : ''}
+                {Math.max(1, Math.round(dataUrlBytes(bg.src) / 1024)).toLocaleString()} KB
+              </div>
+            </div>
+            {chooser('Replace')}
+            <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => onChange(undefined)} />
+          </div>
+
+          <Row gutter={12} align="middle">
+            <Col flex="72px" style={{ fontSize: 13 }}>
+              Opacity
+            </Col>
+            <Col flex="auto">
+              <Slider min={0} max={100} value={Math.round((bg.opacity ?? BG_DEFAULTS.opacity) * 100)} onChange={(v) => set({ opacity: v / 100 })} tooltip={{ formatter: (v) => `${v}%` }} />
+            </Col>
+            <Col flex="96px">
+              <InputNumber size="small" min={0} max={100} addonAfter="%" value={Math.round((bg.opacity ?? BG_DEFAULTS.opacity) * 100)} onChange={(v) => set({ opacity: (v ?? 0) / 100 })} style={{ width: 96 }} />
+            </Col>
+          </Row>
+
+          <Row gutter={12} align="middle" style={{ margin: '10px 0' }}>
+            <Col flex="72px" style={{ fontSize: 13 }}>
+              Position
+            </Col>
+            <Col flex="auto">
+              <Radio.Group
+                size="small"
+                optionType="button"
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                options={[
+                  { value: 'percent', label: 'Chart area (%)' },
+                  {
+                    value: 'axis',
+                    disabled: !axisOk,
+                    label: axisOk ? (
+                      'Axis values'
+                    ) : (
+                      <Tooltip title="Scatter, XY position 차트처럼 X·Y 가 모두 숫자 축일 때만 쓸 수 있어요">
+                        <span>Axis values</span>
+                      </Tooltip>
+                    ),
+                  },
+                ]}
+              />
+            </Col>
+          </Row>
+
+          <Space wrap size={8}>
+            <InputNumber size="small" addonBefore={pct ? 'Left' : 'X start'} addonAfter={pct ? '%' : undefined} step={pct ? 1 : 0.001} value={bg.x} onChange={(v) => set({ x: v })} style={{ width: pct ? 140 : 160 }} />
+            <InputNumber size="small" addonBefore={pct ? 'Top' : 'Y start'} addonAfter={pct ? '%' : undefined} step={pct ? 1 : 0.001} value={bg.y} onChange={(v) => set({ y: v })} style={{ width: pct ? 140 : 160 }} />
+            <InputNumber size="small" addonBefore="Width" addonAfter={pct ? '%' : undefined} min={0} step={pct ? 1 : 0.001} value={bg.w} onChange={(v) => set({ w: v })} style={{ width: pct ? 150 : 160 }} />
+            <InputNumber
+              size="small"
+              addonBefore="Height"
+              addonAfter={pct ? '%' : undefined}
+              min={0}
+              step={pct ? 1 : 0.001}
+              disabled={!!bg.keepAspect}
+              placeholder={bg.keepAspect ? 'auto' : undefined}
+              value={bg.keepAspect ? null : bg.h}
+              onChange={(v) => set({ h: v })}
+              style={{ width: pct ? 150 : 160 }}
+            />
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+              <Switch size="small" checked={!!bg.keepAspect} onChange={(v) => set({ keepAspect: v })} />
+              Keep aspect ratio
+            </span>
+          </Space>
+          <Typography.Paragraph type="secondary" style={{ fontSize: 12, margin: '8px 0 0' }}>
+            {pct
+              ? '차트 영역의 왼쪽 위가 (0, 0), 오른쪽 아래가 (100, 100) 입니다. 예) Left 10 · Top 5 · Width 80 → 가로 80% 크기로 가운데쯤에 배치'
+              : '이미지 왼쪽 아래 모서리를 축 값 (X start, Y start) 에 두고, 가로·세로를 축 단위로 정합니다. 데이터와 같은 좌표계라 실제 위치에 맞춰 겹쳐 볼 수 있어요.'}
+          </Typography.Paragraph>
+          {!pct && (bg.x == null || bg.y == null || !bg.w || (!bg.keepAspect && !bg.h)) && (
+            <Typography.Text type="warning" style={{ fontSize: 12 }}>
+              X start, Y start, Width{bg.keepAspect ? '' : ', Height'} 를 모두 넣으면 표시됩니다.
+            </Typography.Text>
+          )}
+        </div>
+      )}
+    </Form.Item>
   );
 }

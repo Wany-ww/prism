@@ -1,7 +1,8 @@
 """사용자 작성 Python 코드(Parser, 노드) 로딩/실행.
 
 사내 엔지니어가 작성하는 코드를 그대로 실행하는 신뢰 모델이다.
-pd / np / re / json / math / datetime 은 import 없이 사용할 수 있다.
+pd / np / re / json / math / datetime / prism 은 import 없이 사용할 수 있다.
+prism.read_csv(path, encoding=...) 는 Rust 엔진의 빠른 CSV 파서다 (pd.read_csv 와 같은 타입 추론).
 """
 
 import datetime
@@ -14,6 +15,8 @@ import traceback
 
 import numpy as np
 import pandas as pd
+
+from .native import user_helpers
 
 _cache: dict[tuple[str, str], object] = {}
 _lock = threading.Lock()
@@ -34,6 +37,7 @@ def _base_globals(label: str) -> dict:
         "json": json,
         "math": math,
         "datetime": datetime,
+        "prism": user_helpers,
     }
 
 

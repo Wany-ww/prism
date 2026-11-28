@@ -455,8 +455,11 @@ function EquipmentForm({
             message="For equipment on a separate LAN"
             description={
               <span>
-                게이트웨이 PC(대표 설비 PC / 작업 PC)에서 <code>python prism_agent.py --server http://서버:8000 --equipment "{value.name || '설비명'}"</code> 를 실행하면
-                아래 경로 설정을 서버에서 받아 변경된 파일만 전송합니다. 경로는 게이트웨이 PC 기준입니다.
+                게이트웨이 PC(대표 설비 PC / 작업 PC)에 <a href="/api/agent/download">prism-agent.exe</a> (설치 필요 없음) 를 복사해{' '}
+                <code>
+                  prism-agent.exe --server {window.location.origin} --equipment "{value.name || '설비명'}"
+                </code>{' '}
+                를 실행하면 아래 경로 설정을 서버에서 받아 변경된 파일만 전송합니다. 경로는 게이트웨이 PC 기준입니다.
               </span>
             }
           />

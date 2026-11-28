@@ -26,12 +26,14 @@ parse(path, ctx) -> DataFrame | list[dict]
           "encoding": 설비에 설정된 인코딩, "options": 설비별 옵션(dict),
           "source_path": 원본 경로, "file_mtime": 파일 수정시각(datetime)}
 반환 컬럼 중 `_ts` 는 레코드 시각으로 사용됩니다 (없으면 파일 수정시각).
-pd, np, re, json, math, datetime 은 import 없이 사용할 수 있습니다.
+pd, np, re, json, math, datetime, prism 은 import 없이 사용할 수 있습니다.
+prism.read_csv(path, encoding=..., sep=",", skiprows=0, meta_prefix="#") 는 Rust 엔진의 빠른 CSV 파서입니다
+(pd.read_csv 와 같은 타입 추론. meta_prefix 로 시작하는 'Key=Value' 줄은 df.attrs["meta"] 로).
 """
 
 
 def parse(path, ctx):
-    df = pd.read_csv(path, encoding=ctx["encoding"])
+    df = prism.read_csv(path, encoding=ctx["encoding"])
     df.columns = [str(c).strip() for c in df.columns]
     # df["_ts"] = pd.to_datetime(df["Date"] + " " + df["Time"])
     return df

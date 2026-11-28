@@ -1,12 +1,12 @@
 """시스템 내장 노드: source / match / union / dataset / output / python."""
 
-import math
 from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
 
 from ..capture.store import load_records
+from . import native
 from .frames import load_dataset, save_dataset
 from .usercode import call_user, load_function, to_frame
 
@@ -24,27 +24,6 @@ def _ts_column(df: pd.DataFrame, explicit: str | None) -> str:
         if str(c) == "_ts" or str(c).endswith("._ts"):
             return c
     raise NodeError("No time column (_ts) found. Set the time column explicitly.")
-
-
-def _norm_value(v, upper: bool):
-    if v is None or (isinstance(v, float) and math.isnan(v)):
-        return None
-    if isinstance(v, float) and v.is_integer():
-        v = int(v)
-    t = str(v).strip()
-    if t == "":
-        return None
-    return t.upper() if upper else t
-
-
-def _key_series(s: pd.Series, normalize: bool, upper: bool, side: str) -> pd.Series:
-    vals = s.map(lambda v: _norm_value(v, upper)) if normalize else s.astype(object)
-    # null 키는 서로 매칭되지 않도록 고유 값으로 치환
-    null = vals.isna()
-    if null.any():
-        vals = vals.astype(object)
-        vals[null] = [f"\x00null{side}{i}" for i in range(int(null.sum()))]
-    return vals.astype(str)
 
 
 def node_source(ctx, params: dict, inputs: list[pd.DataFrame]) -> pd.DataFrame:
@@ -69,58 +48,45 @@ def node_source(ctx, params: dict, inputs: list[pd.DataFrame]) -> pd.DataFrame:
     return df
 
 
-def _pairs(left: pd.DataFrame, right: pd.DataFrame, keys: list[dict], params: dict) -> pd.DataFrame:
-    """키(+시각)만으로 짝을 찾아 (__li, __ri) 행 번호 쌍을 돌려줌. 짝이 없는 쪽은 NaN.
-    수천 개 컬럼을 가진 입력을 merge 과정에서 여러 번 복사하지 않기 위해, 실제 데이터는 마지막에 한 번만 조립한다."""
-    normalize = params.get("normalize", True)
-    upper = params.get("ignore_case", False)
-    how = params.get("how", "inner")
+MATCH_STRATEGIES = ("exact", "nearest_after", "nearest_before", "nearest")
+
+
+def _pairs(left: pd.DataFrame, right: pd.DataFrame, keys: list[dict], params: dict) -> tuple[np.ndarray, np.ndarray]:
+    """키(+시각)만으로 짝을 찾아 (왼쪽 행 번호, 오른쪽 행 번호) 배열을 돌려줌. 짝이 없는 쪽은 -1.
+    짝 찾기(키 정규화, exact 조인, 가장 가까운 시각 매칭)는 Rust 엔진이 하고, 수천 개 컬럼의 실제 데이터는
+    마지막에 한 번만 조립한다. 행 순서는 예전 pandas merge / merge_asof 와 같다."""
     strategy = params.get("strategy", "exact")
-    kcols = [f"__k{i}" for i in range(len(keys))]
-    lk = pd.DataFrame({kc: _key_series(left[k["left"]], normalize, upper, "L").to_numpy() for kc, k in zip(kcols, keys)})
-    rk = pd.DataFrame({kc: _key_series(right[k["right"]], normalize, upper, "R").to_numpy() for kc, k in zip(kcols, keys)})
-    lk["__li"] = np.arange(len(left))
-    rk["__ri"] = np.arange(len(right))
-
-    if strategy == "exact":
-        dup = params.get("duplicates", "all")
-        if dup in ("first", "last"):
-            rk = rk.drop_duplicates(subset=kcols, keep=dup)
-        return lk.merge(rk, on=kcols, how=how)[["__li", "__ri"]]
-
-    direction = {"nearest_after": "forward", "nearest_before": "backward", "nearest": "nearest"}.get(strategy)
-    if direction is None:
+    if strategy not in MATCH_STRATEGIES:
         raise NodeError(f"Unknown match strategy: {strategy}")
-    lt = _ts_column(left, params.get("left_time"))
-    rt = _ts_column(right, params.get("right_time"))
-    lk["__lt"] = pd.to_datetime(left[lt], errors="coerce").to_numpy()
-    rk["__rt"] = pd.to_datetime(right[rt], errors="coerce").to_numpy()
-    rk = rk[rk["__rt"].notna()]
-    l_ok = lk[lk["__lt"].notna()].sort_values("__lt")
-    l_na = lk[lk["__lt"].isna()]
-    tol_h = float(params.get("tolerance_hours") or 0)
-    res = pd.merge_asof(
-        l_ok,
-        rk.sort_values("__rt"),
-        left_on="__lt",
-        right_on="__rt",
-        by=kcols,
-        direction=direction,
-        tolerance=pd.Timedelta(hours=tol_h) if tol_h > 0 else None,
-    )[["__li", "__ri"]]
-    if how == "inner":
-        return res[res["__ri"].notna()]
-    res = pd.concat([res, l_na[["__li"]]], ignore_index=True, sort=False)
-    if how == "outer":
-        used = set(res["__ri"].dropna().astype(int))
-        res = pd.concat([res, rk.loc[~rk["__ri"].isin(used), ["__ri"]]], ignore_index=True, sort=False)
-    return res
+    lt = rt = tol = None
+    if strategy != "exact":
+        lt = native.time_payload(left[_ts_column(left, params.get("left_time"))])
+        rt = native.time_payload(right[_ts_column(right, params.get("right_time"))])
+        tol_h = float(params.get("tolerance_hours") or 0)
+        tol = int(round(tol_h * 3600 * 1_000_000)) if tol_h > 0 else None
+    try:
+        return native.match_pairs(
+            [native.key_payload(left[k["left"]]) for k in keys],
+            [native.key_payload(right[k["right"]]) for k in keys],
+            normalize=bool(params.get("normalize", True)),
+            upper=bool(params.get("ignore_case", False)),
+            how=params.get("how", "inner"),
+            strategy=strategy,
+            duplicates=params.get("duplicates", "all"),
+            left_time=lt,
+            right_time=rt,
+            tolerance_us=tol,
+        )
+    except ValueError as e:
+        raise NodeError(str(e)) from e
 
 
-def _pick(df: pd.DataFrame, idx: pd.Series) -> pd.DataFrame:
-    """행 번호 목록대로 행을 꺼냄. NaN(짝 없음)은 빈 행."""
-    pos = idx.fillna(-1).astype(np.int64).to_numpy()
-    return df.reset_index(drop=True).reindex(pos).reset_index(drop=True)
+def _pick(df: pd.DataFrame, pos: np.ndarray) -> pd.DataFrame:
+    """행 번호 목록대로 행을 꺼냄. -1(짝 없음)은 빈 행."""
+    df = df.reset_index(drop=True)
+    if len(pos) and pos.min() >= 0:
+        return df.take(pos).reset_index(drop=True)
+    return df.reindex(pos).reset_index(drop=True)
 
 
 def node_match(ctx, params: dict, inputs: list[pd.DataFrame]) -> pd.DataFrame:
@@ -135,9 +101,9 @@ def node_match(ctx, params: dict, inputs: list[pd.DataFrame]) -> pd.DataFrame:
             raise NodeError(f"Left input has no column '{k['left']}'.")
         if k["right"] not in right.columns:
             raise NodeError(f"Right input has no column '{k['right']}'.")
-    pairs = _pairs(left, right, keys, params)
-    out_l = _pick(left, pairs["__li"])
-    out_r = _pick(right, pairs["__ri"])
+    li, ri = _pairs(left, right, keys, params)
+    out_l = _pick(left, li)
+    out_r = _pick(right, ri)
     # 양쪽에 같은 이름이 있으면 오른쪽에 _r (pandas merge 의 suffixes=("", "_r") 와 같은 규칙)
     out_r.columns = [f"{c}_r" if c in out_l.columns else c for c in out_r.columns]
     return pd.concat([out_l, out_r], axis=1)

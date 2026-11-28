@@ -6,7 +6,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import models  # noqa: F401  (테이블 등록)
-from .api import agent, data, equipment, flows, parsers
+from .api import agent, data, equipment, flows, parsers, workspace
+from .api import ai as ai_api
 from .api import graph as graph_api
 from .capture.store import migrate_sql_records
 from .config import FRONTEND_DIST, SCHEDULER_ENABLED, SEED_DEMO
@@ -30,7 +31,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="PRISM - Camera manufacturing process tracking", lifespan=lifespan)
-for r in (equipment.router, parsers.router, flows.router, data.router, agent.router, graph_api.router):
+for r in (equipment.router, parsers.router, flows.router, data.router, agent.router, graph_api.router, workspace.router, ai_api.router):
     app.include_router(r)
 
 

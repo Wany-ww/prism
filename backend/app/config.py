@@ -25,6 +25,10 @@ DATASET_DIR = DATA_DIR / "datasets"
 RECORDS_DIR = DATA_DIR / "records"
 STAGING_DIR = DATA_DIR / "staging"
 FRONTEND_DIST = ROOT_DIR / "frontend" / "dist"
+# 서버 이전용 설정 폴더 (설비·Parser·노드·Flow·대시보드). 새 서버의 같은 위치에 복사하고 install.bat 을 실행하면 들여온다.
+SETTINGS_DIR = Path(os.environ.get("PRISM_SETTINGS_DIR", ROOT_DIR / "settings"))
+# 게이트웨이 PC 용 수집 에이전트 실행 파일 (화면에서 내려받음)
+AGENT_EXE = ROOT_DIR / "agent" / "prism-agent.exe"
 
 DATABASE_URL = os.environ.get("PRISM_DATABASE_URL", f"sqlite:///{(DATA_DIR / 'prism.db').as_posix()}")
 
@@ -48,6 +52,14 @@ NEO4J_URI = os.environ.get("PRISM_NEO4J_URI", "")
 NEO4J_USER = os.environ.get("PRISM_NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.environ.get("PRISM_NEO4J_PASSWORD", "")
 NEO4J_DATABASE = os.environ.get("PRISM_NEO4J_DATABASE", "neo4j")
+
+# AI Agent: 프롬프트로 Flow·대시보드를 만들어 주는 에이전트. 지금은 이 서버에 로그인된 Claude Code CLI 를 임시로 사용.
+AI_CLAUDE_BIN = os.environ.get("PRISM_CLAUDE_BIN", "")  # 비어 있으면 PATH 에서 claude 를 찾음
+# 에이전트가 호출할 PRISM API 주소 (백엔드 자신)
+AI_API_URL = os.environ.get("PRISM_AI_API_URL", "http://127.0.0.1:8000")
+AI_TIMEOUT_MIN = int(os.environ.get("PRISM_AI_TIMEOUT_MIN", "30"))
+AI_MODEL = os.environ.get("PRISM_AI_MODEL", "")  # 비어 있으면 Claude Code 기본 모델
+AGENT_DIR = DATA_DIR / "agent"
 
 for d in (DATA_DIR, DATASET_DIR, RECORDS_DIR, STAGING_DIR):
     d.mkdir(parents=True, exist_ok=True)

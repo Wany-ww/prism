@@ -46,27 +46,18 @@ def _upgrade_labels(row: NodeType, spec: dict) -> None:
         row.params = params  # JSON 컬럼은 새 리스트를 대입해야 변경이 저장됨
 
 
+# prism.read_csv: Rust 엔진의 빠른 CSV 파서 (pd.read_csv 와 같은 타입 추론). pd.read_csv 를 써도 된다.
 BLADE_PARSER = '''def parse(path, ctx):
-    df = pd.read_csv(path, encoding=ctx["encoding"])
+    df = prism.read_csv(path, encoding=ctx["encoding"])
     df.columns = [str(c).strip() for c in df.columns]
     df["_ts"] = pd.to_datetime(df["DateTime"])
     return df
 '''
 
-DRIVE_PARSER = '''import io
-
-
-def parse(path, ctx):
+DRIVE_PARSER = '''def parse(path, ctx):
     """'#Key=Value' 메타 헤더 + CSV 본문. 날짜/시간이 분리된 컬럼을 합쳐 _ts 생성."""
-    meta, body = {}, []
-    with open(path, encoding=ctx["encoding"]) as f:
-        for line in f:
-            if line.startswith("#"):
-                k, _, v = line[1:].strip().partition("=")
-                meta[k.strip()] = v.strip()
-            else:
-                body.append(line)
-    df = pd.read_csv(io.StringIO("".join(body)))
+    df = prism.read_csv(path, encoding=ctx["encoding"], meta_prefix="#")
+    meta = df.attrs["meta"]  # '#' 줄의 Key=Value
     df.columns = [str(c).strip() for c in df.columns]
     df["_ts"] = pd.to_datetime(df["Date"] + " " + df["Time"], format="%Y/%m/%d %H:%M:%S")
     df["Machine"] = meta.get("Machine")
@@ -76,7 +67,7 @@ def parse(path, ctx):
 
 EOL_PARSER = '''def parse(path, ctx):
     """EOL 로그는 cp949 인코딩 (설비 설정의 인코딩 값 사용)."""
-    df = pd.read_csv(path, encoding=ctx["encoding"])
+    df = prism.read_csv(path, encoding=ctx["encoding"])
     df["_ts"] = pd.to_datetime(df["검사시간"])
     return df
 '''
@@ -237,10 +228,14 @@ def _warm_up(eq_ids: list[int], flow_ids: list[int]):
     log.info("demo warm-up finished")
 
 
-def seed_all(demo: bool):
+def seed_all(demo: bool, background: bool = True):
+    """background=False 면 데모 수집·Flow 첫 실행까지 끝난 뒤 돌아온다 (install.bat)."""
     with SessionLocal() as db:
         ensure_node_library(db)
         if demo and seed_demo(db):
             eq_ids = list(db.scalars(select(Equipment.id)))
             flow_ids = [f.id for f in db.scalars(select(Flow).order_by(Flow.kind.desc()))]  # match 먼저
-            threading.Thread(target=_warm_up, args=(eq_ids, flow_ids), daemon=True).start()
+            if background:
+                threading.Thread(target=_warm_up, args=(eq_ids, flow_ids), daemon=True).start()
+            else:
+                _warm_up(eq_ids, flow_ids)

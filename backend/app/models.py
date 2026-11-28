@@ -152,6 +152,24 @@ class Dataset(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now, onupdate=now)
 
 
+class AgentJob(Base):
+    """AI Agent 에게 맡긴 요청 한 건 (프롬프트 → Flow·대시보드 생성)."""
+
+    __tablename__ = "agent_jobs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    agent: Mapped[str] = mapped_column(String(50), default="claude-code")
+    prompt: Mapped[str] = mapped_column(Text, default="")
+    # queued | running | done | error | cancelled
+    status: Mapped[str] = mapped_column(String(20), default="queued")
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # 진행 기록: [{t, kind: text|tool|error|result, text}]
+    events: Mapped[list] = mapped_column(JSONType, default=list)
+    # 만들어진 항목: {flows: [{id, kind, name, action}], dashboards: [...], summary, cost_usd, turns}
+    result: Mapped[dict] = mapped_column(JSONType, default=dict)
+    error: Mapped[str] = mapped_column(Text, default="")
+
+
 class Dashboard(Base):
     __tablename__ = "dashboards"
     id: Mapped[int] = mapped_column(primary_key=True)

@@ -11,3 +11,11 @@ demo/logs/
 .runtime/
 *.tsbuildinfo
 reference/network.png
+# Rust 빌드 결과 (scripts\build-native.ps1)
+native/target/
+backend/app/prism_core.pyd
+agent/prism-agent.exe
+# 배포 폴더, 실행 로그, 서버 이전용 설정 폴더 (비밀번호가 들어갈 수 있음)
+dist/
+logs/
+settings/

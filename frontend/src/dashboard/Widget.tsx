@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, Dataset, FramePayload } from '../api';
 import DataGrid from '../components/DataGrid';
 import { useTheme } from '../theme';
+import { bgPercentStyle, bgUnit } from './background';
 import { buildOption, ChartConfig, neededColumns } from './charts';
 import { DS_COL, Layer, layerLabels, LinkCfg, mergeFrames, normKey, paramIdOf, Params, renameColumns, resolveLinkColumn, resolveParam, SEL_COL, Selection } from './link';
 
@@ -318,14 +319,20 @@ export default function WidgetView({
   } else if (linked && behavior === 'filter' && !data.rows.length) {
     body = <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No data for the selected value" />;
   } else if (w.type === 'chart' && option) {
+    const bg = w.chart?.background;
+    // 축 좌표 배경은 차트 옵션 안(맨 아래 레이어)에서 그리고, % 배경은 투명한 차트 캔버스 뒤에 이미지로 깐다
+    const pctBg = bg?.src && bgUnit(bg, w.chart!.kind) === 'percent' ? bg : null;
     body = (
-      <ReactECharts
-        option={option}
-        notMerge
-        lazyUpdate
-        style={{ height: '100%', width: '100%' }}
-        onEvents={canClickSelect ? { click: onChartClick } : undefined}
-      />
+      <div style={{ position: 'relative', height: '100%', width: '100%', overflow: 'hidden' }}>
+        {pctBg && <img src={pctBg.src} alt="" draggable={false} style={bgPercentStyle(pctBg)} />}
+        <ReactECharts
+          option={option}
+          notMerge
+          lazyUpdate
+          style={{ position: 'relative', zIndex: 1, height: '100%', width: '100%' }}
+          onEvents={canClickSelect ? { click: onChartClick } : undefined}
+        />
+      </div>
     );
   } else if (w.type === 'table') {
     const cols = w.table?.columns?.length ? [...(dsIdx >= 0 ? [DS_COL] : []), ...w.table.columns] : undefined;

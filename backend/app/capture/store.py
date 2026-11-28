@@ -2,6 +2,7 @@
 
 예전에는 레코드 1행 = SQL 1행(JSON)이었는데, 컬럼이 수천 개면 저장·조회가 모두 느리고 메모리를 많이 써서
 수집 파일 단위 parquet 로 바꿨다. 조회는 시각 범위가 겹치는 파일만, 필요한 컬럼만 읽는다.
+parquet 읽기/쓰기와 시각 범위 거르기는 Rust 엔진(prism_core)이 한다.
 """
 
 import json
@@ -12,14 +13,14 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
-import pyarrow as pa
-import pyarrow.compute as pc
-import pyarrow.parquet as pq
 from sqlalchemy import inspect, or_, select, text
 
 from ..config import RECORDS_DIR
+from ..engine import native
 from ..engine.frames import to_table, write_parquet
+from ..engine.native import core
 from ..models import CapturedFile, Equipment
 
 log = logging.getLogger("prism.records")
@@ -87,34 +88,24 @@ def delete_equipment(eq_id: int):
     shutil.rmtree(RECORDS_DIR / str(eq_id), ignore_errors=True)
 
 
-def _concat(tables: list[pa.Table]) -> pd.DataFrame:
+def _concat(tables: list) -> pd.DataFrame:
+    # 같은 이름 컬럼이 파일마다 타입이 다르면 담을 수 있는 타입(정수+실수 → 실수, 그 밖 → 문자열)으로 맞춰 합침
     if not tables:
         return pd.DataFrame()
-    try:
-        return pa.concat_tables(tables, promote_options="permissive").to_pandas()
-    except (pa.ArrowInvalid, pa.ArrowTypeError):
-        # 같은 이름 컬럼이 파일마다 타입이 다르면 pandas 로 합침 (object 컬럼이 됨)
-        return pd.concat([t.to_pandas() for t in tables], ignore_index=True, sort=False)
+    return native.to_pandas(core.concat(tables))
 
 
-def _read(path: Path, columns: list[str] | None, since=None, until=None) -> pa.Table | None:
-    # 컬럼이 수천 개면 parquet 메타데이터 해석이 읽기 시간의 대부분이라 파일은 한 번만 연다
+def _read(path: Path, columns: list[str] | None, since=None, until=None):
+    # 시각 범위에 걸리는 행이 없으면 다른 컬럼은 읽지 않는다 (메타데이터 해석도 파일당 한 번)
     if not path.exists():
         return None
-    pf = pq.ParquetFile(path)
-    names = set(pf.schema_arrow.names)
-    cols = None if columns is None else [c for c in dict.fromkeys(["_ts", *columns]) if c in names]
-    t = pf.read(columns=cols)
-    if (since is not None or until is not None) and "_ts" in names:
-        ts = t.column("_ts")
-        mask = None
-        if since is not None:
-            mask = pc.greater_equal(ts, pa.scalar(pd.Timestamp(since), ts.type))
-        if until is not None:
-            m2 = pc.less_equal(ts, pa.scalar(pd.Timestamp(until), ts.type))
-            mask = m2 if mask is None else pc.and_(mask, m2)
-        t = t.filter(pc.fill_null(mask, False))
-    return t
+    cols = None if columns is None else list(dict.fromkeys(["_ts", *columns]))
+    return core.read_parquet(
+        str(path),
+        cols,
+        None if since is None else native.to_us(since),
+        None if until is None else native.to_us(until),
+    )
 
 
 def load_records(db, equipment_ids: list[int], since: datetime | None = None, until: datetime | None = None, columns: list[str] | None = None) -> pd.DataFrame:
@@ -130,7 +121,7 @@ def load_records(db, equipment_ids: list[int], since: datetime | None = None, un
     for fid, eq_id in files:
         t = _read(file_path(eq_id, fid), columns, since, until)
         if t is not None and t.num_rows:
-            tables.append(t.append_column("_equipment", pa.array([names.get(eq_id, "")] * t.num_rows, pa.string())))
+            tables.append(t.append_str("_equipment", names.get(eq_id, "")))
     df = _concat(tables)
     if df.empty:
         return pd.DataFrame({"_ts": pd.Series(dtype="datetime64[us]"), "_equipment": pd.Series(dtype=object)})
@@ -155,10 +146,10 @@ def latest_records(db, eq_id: int, offset: int, limit: int) -> tuple[pd.DataFram
         t = _read(file_path(eq_id, f.id), None)
         if t is None or not t.num_rows:
             continue
-        t = t.append_column("__f", pa.array([f.id] * t.num_rows, pa.int64())).append_column("__r", pa.array(range(t.num_rows), pa.int64()))
+        t = t.append_i64("__f", np.full(t.num_rows, f.id, dtype=np.int64)).append_i64("__r", np.arange(t.num_rows, dtype=np.int64))
         tables.append(t)
         got += t.num_rows
-        lo = pd.Series(t.column("_ts").to_pandas()).min()
+        lo = native.to_pandas(t.select(["_ts"]))["_ts"].min() if "_ts" in t.column_names else pd.NaT
         if pd.notna(lo):
             oldest = lo if oldest is None else min(oldest, lo)
     df = _concat(tables)
@@ -176,7 +167,7 @@ def fields(db, eq_id: int) -> list[str]:
     for fid in ids:
         p = file_path(eq_id, fid)
         if p.exists():
-            for n in pq.ParquetFile(p).schema_arrow.names:
+            for n, _ in core.read_schema(str(p)):
                 if n != "_ts":
                     keys.setdefault(n, None)
     return list(keys) + ["_ts", "_equipment"]

@@ -1,15 +1,17 @@
 import { AutoComplete, Button, Empty, Input } from 'antd';
-import { ApiOutlined, CloseOutlined, HistoryOutlined, MoonFilled, PlusOutlined, SearchOutlined, SunFilled } from '@ant-design/icons';
+import { ApiOutlined, CloseOutlined, HistoryOutlined, MoonFilled, PlusOutlined, RobotOutlined, SearchOutlined, SettingOutlined, SunFilled } from '@ant-design/icons';
 import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api, Equipment } from './api';
+import AgentPanel from './components/AgentPanel';
 import PrismMark from './components/PrismMark';
 import { statusMeta } from './components/StatusTag';
 import { accentOf, isWorkspace, STAGES, stageOf } from './nav';
 import { removeRecent, useRecentList } from './recent';
 import { useTheme } from './theme';
 
-type Panel = 'equipment' | 'recent' | null;
+type Panel = 'equipment' | 'recent' | 'agent' | null;
+const PANEL_TITLE: Record<Exclude<Panel, null>, string> = { equipment: 'Equipment capture status', recent: 'Recently viewed', agent: 'AI Agent' };
 
 function useEquipmentStatus() {
   const [list, setList] = useState<Equipment[]>([]);
@@ -144,12 +146,13 @@ export default function Shell({ children }: { children: ReactNode }) {
       </div>
 
       {panel && (
-        <aside className="side-panel">
+        <aside className={`side-panel ${panel === 'agent' ? 'side-panel-wide' : ''}`}>
           <div className="side-panel-head">
-            {panel === 'equipment' ? 'Equipment capture status' : 'Recently viewed'}
+            {PANEL_TITLE[panel]}
             <Button type="text" size="small" icon={<CloseOutlined />} onClick={() => setPanel(null)} />
           </div>
           <div className="side-panel-body">
+            {panel === 'agent' && <AgentPanel />}
             {panel === 'equipment' &&
               eqs.map((e) => {
                 const st = statusMeta(e.running ? 'running' : e.status, e.enabled);
@@ -207,6 +210,15 @@ export default function Shell({ children }: { children: ReactNode }) {
         <div className={`rail-btn ${panel === 'recent' ? 'active' : ''}`} onClick={() => flip('recent')}>
           <HistoryOutlined />
           Recent
+        </div>
+        <div className={`rail-btn ${panel === 'agent' ? 'active' : ''}`} onClick={() => flip('agent')}>
+          <RobotOutlined />
+          AI Agent
+        </div>
+        <div className="rail-sep" />
+        <div className={`rail-btn ${loc.pathname.startsWith('/settings') ? 'active' : ''}`} onClick={() => nav('/settings')}>
+          <SettingOutlined />
+          Settings
         </div>
         <div className="theme-btn" onClick={toggle} title={mode === 'dark' ? 'Light mode' : 'Dark mode'}>
           {mode === 'dark' ? <MoonFilled /> : <SunFilled />}

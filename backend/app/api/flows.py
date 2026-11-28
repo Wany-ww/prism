@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..models import Flow, NodeType
 from ..scheduler import scheduler
+from ..workspace import eq_name_map, graph_from_portable, graph_to_portable
 from .common import get_or_404, json_download, row_dict
 
 router = APIRouter(prefix="/api", tags=["flows"])
@@ -165,17 +166,17 @@ def delete_flow(fid: int, db: Session = Depends(get_db)):
 
 @router.get("/flows/{fid}/export")
 def export_flow(fid: int, db: Session = Depends(get_db)):
-    """다른 PRISM 서버로 옮길 수 있게 Flow 정의를 .json 파일로 내려받음 (설비/데이터셋 id 가 아니라 이름으로 참조하므로,
-    그대로 옮겨서는 못 쓸 수 있고 옮긴 뒤 설비 데이터 노드 등을 다시 확인해야 할 수 있음)."""
+    """다른 PRISM 서버로 옮길 수 있게 Flow 정의를 .json 파일로 내려받음. 설비는 id 대신 이름으로 적어 두므로
+    옮긴 서버에 같은 이름의 설비가 있으면 그대로 연결된다 (데이터셋은 원래 이름으로 참조)."""
     f = get_or_404(db, Flow, fid)
     payload = {
         "_type": "prism-flow",
-        "version": 1,
+        "version": 2,
         "name": f.name,
         "kind": f.kind,
         "description": f.description,
         "schedule_minutes": f.schedule_minutes,
-        "graph": f.graph,
+        "graph": graph_to_portable(f.graph, eq_name_map(db)),
     }
     return json_download(payload, f.name)
 
@@ -187,11 +188,13 @@ def import_flow(body: dict, db: Session = Depends(get_db)):
     name = str(body.get("name") or "Imported flow").strip() or "Imported flow"
     kind = body.get("kind") if body.get("kind") in ("match", "analysis") else "analysis"
     graph = body.get("graph") if isinstance(body.get("graph"), dict) else {"nodes": [], "edges": []}
+    # 설비 이름 → 이 서버의 id (version 1 파일은 id 그대로)
+    graph, missing = graph_from_portable(graph, {v: k for k, v in eq_name_map(db).items()})
     # 자동 실행은 끈 채로 들여오기 — 옮긴 환경에 설비/데이터셋이 그대로 있는지 확인한 뒤 켜도록
     f = Flow(name=f"{name} (imported)", kind=kind, description=str(body.get("description") or ""), graph=graph, schedule_minutes=0)
     db.add(f)
     db.commit()
-    return row_dict(f)
+    return {**row_dict(f), "missing_equipment": missing}
 
 
 @router.post("/flows/preview")

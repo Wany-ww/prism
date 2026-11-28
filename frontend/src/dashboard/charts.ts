@@ -1,6 +1,7 @@
 import 'echarts-gl'; // 사이드이펙트: echarts 인스턴스에 3D(grid3D/scatter3D) 컴포넌트를 등록
 import type { FramePayload } from '../api';
 import type { Mode } from '../theme';
+import { addAxisBackground, bgAxisBox, ChartBackground } from './background';
 import { DS_COL, SEL_COL } from './link';
 
 // 토스 톤 범주형 팔레트 — validate_palette.js 로 라이트/다크 각각 전 항목 통과한 순서 (순환·재배열 금지)
@@ -43,6 +44,8 @@ export type ChartConfig = {
   spec?: { shape?: SpecShape; cx?: number | null; cy?: number | null; r?: number | null; dx?: number | null; dy?: number | null };
   /** 히스토그램: 공정능력(Cp/Cpk) 계산에 쓰는 규격 하한(LSL)/상한(USL). 하나만 넣으면 그쪽만(한쪽 규격) 계산 */
   limits?: { lsl?: number | null; usl?: number | null };
+  /** 배경 이미지 (투명도·위치·크기) */
+  background?: ChartBackground;
 };
 export type ChartSize = { width: number; height: number };
 
@@ -123,6 +126,10 @@ function selectedRows(d: FramePayload): Set<unknown[]> | null {
 }
 
 export function buildOption(cfg: ChartConfig, d: FramePayload, mode: Mode = 'light', size?: ChartSize): any {
+  return addAxisBackground(chartOption(cfg, d, mode, size), cfg.background, cfg.kind);
+}
+
+function chartOption(cfg: ChartConfig, d: FramePayload, mode: Mode, size?: ChartSize): any {
   T = THEMES[mode];
   switch (cfg.kind) {
     case 'heatmap':
@@ -367,6 +374,13 @@ function xyPlot(cfg: ChartConfig, d: FramePayload, size?: ChartSize) {
     }
   });
   if (!total) return emptyOption('No points to show');
+
+  // 축 좌표 배경 이미지도 1:1 축 범위 안에 들어오게
+  const bgBox = bgAxisBox(cfg.background, cfg.kind);
+  if (bgBox) {
+    extend(bgBox[0], bgBox[1]);
+    extend(bgBox[2], bgBox[3]);
+  }
 
   if (hasSpec) {
     const cx = sp.cx!, cy = sp.cy!;
