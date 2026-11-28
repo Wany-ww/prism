@@ -144,6 +144,7 @@ export default function AgentPanel() {
   const [events, setEvents] = useState<AiEvent[]>([]);
   const [err, setErr] = useState('');
   const [sending, setSending] = useState(false);
+  const [starting, setStarting] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
   const seen = useRef(0);
 
@@ -230,6 +231,35 @@ export default function AgentPanel() {
       <div className="agent-sec-title" style={{ marginTop: 14 }}>
         Request
       </div>
+      {agent && !agent.started && (
+        <div className="agent-start-hint">
+          <span style={{ flex: 1 }}>
+            {agent.installed ? `${agent.name} 를 시작해야 요청을 보낼 수 있습니다.` : `${agent.name} 가 이 서버에 설치되어 있지 않습니다.`}
+          </span>
+          {agent.installed && (
+            <Button
+              size="small"
+              type="primary"
+              icon={<PlayCircleOutlined />}
+              loading={starting}
+              onClick={async () => {
+                setStarting(true);
+                setErr('');
+                try {
+                  await api.post(`/api/ai/agents/${agent.id}/start`);
+                } catch (e: any) {
+                  setErr(e.message);
+                } finally {
+                  setStarting(false);
+                  loadAgents();
+                }
+              }}
+            >
+              Start
+            </Button>
+          )}
+        </div>
+      )}
       <Input.TextArea
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}

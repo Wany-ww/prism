@@ -9,11 +9,13 @@ from . import models  # noqa: F401  (테이블 등록)
 from .api import agent, data, equipment, flows, parsers, workspace
 from .api import ai as ai_api
 from .api import graph as graph_api
+from .api import system as system_api
 from .capture.store import migrate_sql_records
 from .config import FRONTEND_DIST, SCHEDULER_ENABLED, SEED_DEMO
 from .db import Base, SessionLocal, engine, ensure_columns
 from .scheduler import scheduler
 from .seed import seed_all
+from .sysmon import monitor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -24,14 +26,16 @@ async def lifespan(app: FastAPI):
     ensure_columns()
     migrate_sql_records(engine, SessionLocal)
     seed_all(SEED_DEMO)
+    monitor.start()
     if SCHEDULER_ENABLED:
         scheduler.start()
     yield
+    monitor.stop()
     scheduler.stop()
 
 
 app = FastAPI(title="PRISM - Camera manufacturing process tracking", lifespan=lifespan)
-for r in (equipment.router, parsers.router, flows.router, data.router, agent.router, graph_api.router, workspace.router, ai_api.router):
+for r in (equipment.router, parsers.router, flows.router, data.router, agent.router, graph_api.router, workspace.router, ai_api.router, system_api.router):
     app.include_router(r)
 
 

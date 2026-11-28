@@ -150,6 +150,14 @@ Flow는 수동 실행 외에 1분 ~ 1일 주기로 자동 실행할 수 있습�
 - 자동 갱신과 전체 화면 모드(`/view/<id>`, 현장 모니터용)를 지원합니다.
 - 데이터셋은 CSV로 내려받을 수 있습니다.
 
+### System — 서버 모니터링
+
+상단 **System** 메뉴에서 서버 상태를 실시간(5초 간격, 최근 1시간)으로 봅니다. 외부 패키지 없이 Windows API 와 DB 통계 뷰만 쓰므로 폐쇄망 번들에서도 그대로 동작합니다. 기록은 메모리에만 두므로 서버를 다시 켜면 처음부터 쌓입니다.
+
+- **Resources**: CPU·메모리 (서버 PC 전체 / PRISM 프로세스 / PostgreSQL), 네트워크 수신·송신, 데이터 드라이브 여유 공간, PRISM 데이터 폴더별 용량, 서버 가동 시간. 임계치를 넘으면 High / Critical 표시가 붙습니다.
+- **Database**: DB 크기, 연결 수(최대 대비), 초당 트랜잭션·행 읽기/쓰기, 캐시 적중률, 응답 지연, 테이블별 크기·행 수·Dead rows·마지막 vacuum, 현재 연결 목록, 주요 설정.
+- API: `GET /api/system/metrics?since=<epoch>`, `GET /api/system/db`
+
 ## Neo4j 제품 계보 그래프 (선택)
 
 Match 결과를 Neo4j 그래프로 복사해 여러 단계를 건너는 추적 질문에 씁니다. 원본 데이터는 관계형 DB에 그대로 있고, Neo4j 를 설정하지 않아도 나머지 기능은 모두 동작합니다.
@@ -243,7 +251,7 @@ Flow 하나만 내보내기(Flow 화면)도 같은 규칙(설비 이름)을 씁�
 
 오른쪽 레일의 **AI Agent** 에서 하고 싶은 분석을 글로 적으면, 에이전트가 데이터를 살펴보고 **Match Flow → Analysis Flow → 대시보드**까지 만들어 실행합니다.
 
-- 에이전트 준비: **Download → Start → Check** 순서. 지금은 이 서버 PC 에 로그인된 **Claude Code CLI** 를 임시로 씁니다 (내려받기 없음). 전용 에이전트(PRISM AI Agent)는 배포 서버가 생기면 같은 화면에서 내려받아 씁니다.
+- 에이전트 준비: **Download → Start → Check** 순서. Start 한 상태는 `backend\data\agent\started.json` 에 남아 서버를 다시 켜도 유지되고, 시작 전이면 Request 칸 위에 Start 버튼이 나타납니다. 지금은 이 서버 PC 에 로그인된 **Claude Code CLI** 를 임시로 씁니다 (내려받기 없음). 전용 에이전트(PRISM AI Agent)는 배포 서버가 생기면 같은 화면에서 내려받아 씁니다.
 - 에이전트는 [`.claude/skills/prism-builder`](.claude/skills/prism-builder/SKILL.md) 스킬을 따릅니다. 스킬의 helper(`scripts/prism.py`, 표준 라이브러리만 사용)로 PRISM API 만 호출하며, 기존 Flow·데이터셋·대시보드를 지우거나 덮어쓰지 않고 자동 실행도 켜지 않습니다.
 - 요청마다 `backend\data\agent\jobs\<번호>` 작업 폴더에서 실행되고, 셸 명령은 helper 만 허용됩니다. DB·Neo4j 비밀번호 같은 환경변수는 에이전트에 넘기지 않습니다.
 - 진행 기록·만든 항목·결과 보고가 패널에 남습니다. 한 번에 한 요청만 실행합니다.

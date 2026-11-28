@@ -1,4 +1,4 @@
-export type StageKey = 'home' | 'capture' | 'match' | 'analysis' | 'present';
+export type StageKey = 'home' | 'capture' | 'match' | 'analysis' | 'present' | 'system';
 export type StageTab = { label: string; path: string };
 export type Stage = { key: StageKey; label: string; tabs: StageTab[] };
 
@@ -34,6 +34,14 @@ export const STAGES: Stage[] = [
     tabs: [
       { label: 'Dashboards', path: '/dashboards' },
       { label: 'Datasets', path: '/datasets' },
+    ],
+  },
+  {
+    key: 'system',
+    label: 'System',
+    tabs: [
+      { label: 'Resources', path: '/system' },
+      { label: 'Database', path: '/system/db' },
     ],
   },
 ];

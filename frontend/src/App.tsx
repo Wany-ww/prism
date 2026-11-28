@@ -10,6 +10,7 @@ import DatasetsPage from './pages/DatasetsPage';
 import TracePage from './pages/TracePage';
 import DashboardListPage from './pages/DashboardListPage';
 import DashboardPage from './pages/DashboardPage';
+import SystemPage from './pages/SystemPage';
 import SettingsPage from './pages/SettingsPage';
 
 export default function App() {
@@ -37,6 +38,8 @@ export default function App() {
         <Route path="/trace" element={<TracePage />} />
         <Route path="/datasets" element={<DatasetsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/system" element={<SystemPage view="resources" />} />
+        <Route path="/system/db" element={<SystemPage view="db" />} />
       </Routes>
     </Shell>
   );

@@ -1273,6 +1273,17 @@ body.resizing-row .flow-canvas {
   color: var(--red);
   background: var(--red-soft);
 }
+.agent-start-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--blue);
+  background: var(--blue-soft);
+}
 .agent-examples {
   display: flex;
   flex-direction: column;
@@ -1477,6 +1488,90 @@ body.resizing-row .flow-canvas {
 .section-divider.ant-divider-horizontal.ant-divider-with-text::before,
 .section-divider.ant-divider-horizontal.ant-divider-with-text::after {
   border-block-start-color: var(--text-4);
+}
+
+/* ---------- System (서버 자원 · DB 모니터링) ---------- */
+.sys-kpis {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+.sys-kpi .tile-label {
+  justify-content: space-between;
+}
+.sys-kpi .tile-value {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 20px;
+}
+.sys-kpi-row > svg {
+  flex-shrink: 0;
+}
+.sys-kpi .tile-sub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sys-kpi-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sys-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.sys-chart {
+  min-width: 0;
+  border: 1px solid var(--line-soft);
+  padding: 16px 18px 12px;
+}
+.sys-chart-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.sys-chart-title small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+.sys-info {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px 24px;
+  border: 1px solid var(--line-soft);
+}
+.sys-info > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+}
+.sys-info b {
+  font-weight: 600;
+  font-size: 14px;
+}
+.sys-live {
+  background: var(--green);
+  margin-right: 4px;
+  animation: wait-blink 1.8s ease-in-out infinite;
+}
+.sys-warn {
+  color: var(--orange);
+  font-weight: 600;
+}
+.sys-query {
+  display: block;
+  max-width: 520px;
+  font-size: 12px;
+  color: var(--text-2);
 }
 
 /* ---------- motion ----------

@@ -111,7 +111,23 @@ class Runner:
         self.job_id: int | None = None
         self.proc: subprocess.Popen | None = None
         self.cancelled = False
-        self.started: set[str] = set()  # '실행'된 에이전트
+        # '실행'된 에이전트. 서버를 다시 켜도 유지되도록 파일에 기록 (예전엔 메모리에만 있어 재시작하면 Request 가 잠김)
+        self.started: set[str] = self._load_started()
+
+    _STATE = AGENT_DIR / "started.json"
+
+    def _load_started(self) -> set[str]:
+        try:
+            return set(json.loads(self._STATE.read_text(encoding="utf-8")))
+        except Exception:  # noqa: BLE001 — 처음이거나 파일이 깨졌으면 빈 상태
+            return set()
+
+    def _save_started(self):
+        try:
+            self._STATE.parent.mkdir(parents=True, exist_ok=True)
+            self._STATE.write_text(json.dumps(sorted(self.started)), encoding="utf-8")
+        except OSError as e:
+            log.warning("could not save agent state: %s", e)
 
     # ---------- 에이전트 상태 ----------
 
@@ -143,10 +159,12 @@ class Runner:
         if not ver:
             raise AgentUnavailable(err)
         self.started.add(agent_id)
+        self._save_started()
         return self.agent(agent_id)
 
     def stop_agent(self, agent_id: str) -> dict:
         self.started.discard(agent_id)
+        self._save_started()
         return self.agent(agent_id)
 
     def check(self, agent_id: str) -> dict:
