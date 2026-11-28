@@ -70,5 +70,10 @@ Write-Ok "running (PID $($p.Id))"
 Write-Host ''
 Write-Host 'PRISM 이 실행 중입니다. 브라우저에서 접속하세요:' -ForegroundColor Green
 Get-LanUrls $Port | ForEach-Object { Write-Host "  $_" }
+# 다른 PC 에서 접속되는지 (방화벽 규칙) 확인만
+$null = & (Join-Path $PSScriptRoot 'firewall.ps1') -Port $Port -Check *>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Warn2 "PRISM 방화벽 규칙(TCP $Port)이 없어 다른 PC 에서는 접속되지 않을 수 있습니다 → firewall.bat 실행 (관리자 권한)"
+}
 Write-Host '멈추려면 stop.bat'
 if ($Open) { Start-Process "http://localhost:$Port" }

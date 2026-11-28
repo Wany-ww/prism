@@ -56,7 +56,7 @@ function Copy-Tree([string]$from, [string]$to, [string[]]$excludeDirs = @(), [st
 }
 
 Write-Step 'App'
-foreach ($f in 'install.bat', 'run.bat', 'stop.bat', 'README.md') { Copy-Item (Join-Path $Root $f) $Out }
+foreach ($f in 'install.bat', 'run.bat', 'stop.bat', 'firewall.bat', 'README.md') { Copy-Item (Join-Path $Root $f) $Out }
 Copy-Tree (Join-Path $Backend 'app') (Join-Path $Out 'backend\app')
 Copy-Item (Join-Path $Backend 'requirements.txt') (Join-Path $Out 'backend')
 Copy-Tree (Join-Path $Root 'scripts') (Join-Path $Out 'scripts')

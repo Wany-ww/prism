@@ -29,8 +29,11 @@ Capture ──▶ Match ──▶ Analysis ──▶ Present
 | `install.bat` | 처음 한 번 (다시 실행해도 안전). 번들 Python·패키지 확인 → Rust 엔진·화면 확인 → PostgreSQL DB 생성(접속 정보는 `backend\.env`) → 테이블 생성 → `settings\` 설정 폴더가 있으면 들여오기 → Neo4j(번들에 있으면) 초기 비밀번호 |
 | `run.bat` | PostgreSQL → Neo4j(있으면) → PRISM 서버(화면·API·수집·Flow 스케줄러)를 백그라운드로 시작하고 접속 주소를 보여 줌 |
 | `stop.bat` | PRISM 서버(작업 프로세스·AI 에이전트 포함) → Neo4j → PostgreSQL 순서로 중지 |
+| `firewall.bat` | 다른 PC 에서 접속할 수 있게 Windows 방화벽에 서비스 포트(기본 TCP 8000) 허용 규칙을 만들고, 이 설치의 python.exe 를 막는 차단 규칙을 지움 (관리자 확인 창). install.bat 의 마지막 단계에서도 실행됨 |
 
-- 옵션: `install.bat -NoDemo` (데모 없이), `install.bat -Settings D:\old\settings` (다른 위치의 설정 폴더), `install.bat -PgPort 5433`, `run.bat -Port 9000 -Open`
+다른 PC 에서 접속이 안 되면 대부분 방화벽 때문입니다. 서버는 모든 네트워크 카드(`0.0.0.0`)에서 접속을 받지만, Windows 는 처음 실행 때 뜨는 방화벽 확인 창을 닫거나 거부하면 그 python.exe 를 막는 차단 규칙을 만들고, 이 규칙은 허용 규칙보다 우선합니다. `firewall.bat` 은 경로가 아닌 포트 기준 규칙이라 폴더를 옮겨도 유지됩니다. 옵션: `-RemoteAddress LocalSubnet` (같은 서브넷만 허용), `-Check` (확인만), `-Remove` (규칙 삭제).
+
+- 옵션: `install.bat -NoFirewall` (방화벽 단계 건너뜀), `install.bat -NoDemo` (데모 없이), `install.bat -Settings D:\old\settings` (다른 위치의 설정 폴더), `install.bat -PgPort 5433`, `run.bat -Port 9000 -Open`
 - 로그: `logs\backend.log` · `backend.err.log` · `postgres.log` · `neo4j.log` (직전 실행 로그는 `.1` 로 하나 남김)
 - 서버를 옮길 때: 이전 서버에서 **Settings → Save to settings folder** → 그 `settings\` 폴더를 새 배포 폴더에 복사 → `install.bat` (아래 [서버 이전](#서버-이전-설정-폴더))
 - 설비가 하나도 없는 DB 로 설치하면 **데모 시나리오**가 만들어집니다 (아래 [데모](#데모)). 끄려면 `-NoDemo` 또는 `PRISM_SEED_DEMO=0`.

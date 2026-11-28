@@ -5,11 +5,13 @@
 #   4) DB 테이블 생성/보정, 기본 노드 라이브러리 (+ 데모)
 #   5) settings\ 설정 폴더가 있으면 들여오기 (같은 이름은 건너뜀, 수집·자동 실행은 꺼진 채로)
 #   6) Neo4j 가 번들에 있으면 초기 비밀번호 설정 (선택 기능)
+#   7) 다른 PC 에서 접속할 수 있게 방화벽 열기 (관리자 확인 창이 뜸, -NoFirewall 로 건너뜀)
 # 인터넷 연결이 필요 없다 (폐쇄망용). 필요한 파일은 scripts\build-bundle.ps1 로 만든 배포 폴더에 모두 들어 있다.
 param(
     [string]$Settings = '',
     [switch]$NoSettings,
     [switch]$NoDemo,
+    [switch]$NoFirewall,
     [int]$PgPort = 5432
 )
 . "$PSScriptRoot\common.ps1"
@@ -17,7 +19,7 @@ param(
 Write-Host "PRISM install — $Root" -ForegroundColor White
 
 # ---------- 1) Python ----------
-Write-Step '1/6 Python'
+Write-Step '1/7 Python'
 $py = Get-Python
 if (-not $py) { throw '.runtime\python 이 없습니다. 인터넷이 되는 PC 에서 scripts\build-bundle.ps1 로 만든 배포 폴더를 사용하세요.' }
 $ver = & $py -c "import sys; print(sys.version.split()[0])"
@@ -36,7 +38,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Ok 'Python packages'
 
 # ---------- 2) 네이티브 엔진 · 화면 · 에이전트 ----------
-Write-Step '2/6 Native engine / web UI'
+Write-Step '2/7 Native engine / web UI'
 Push-Location $Backend
 try {
     $nv = & $py -c "from app import prism_core; print(prism_core.version())" 2>$null
@@ -58,7 +60,7 @@ Write-Ok 'web UI (frontend\dist)'
 if (Test-Path (Join-Path $Root 'agent\prism-agent.exe')) { Write-Ok 'gateway agent (agent\prism-agent.exe)' } else { Write-Warn2 'agent\prism-agent.exe 없음 (별도 LAN 설비를 쓸 때만 필요)' }
 
 # ---------- 3) PostgreSQL ----------
-Write-Step '3/6 PostgreSQL'
+Write-Step '3/7 PostgreSQL'
 $envs = Read-EnvFile
 if (Test-Path (Join-Path $PgBin 'postgres.exe')) {
     if (Test-Path (Join-Path $PgData 'PG_VERSION')) {
@@ -75,7 +77,7 @@ if (Test-Path (Join-Path $PgBin 'postgres.exe')) {
 }
 
 # ---------- 4) DB 테이블 ----------
-Write-Step '4/6 Database'
+Write-Step '4/7 Database'
 $startedPg = $false
 if (Test-PgCluster) { $wasRunning = Test-PgRunning; $null = Start-Pg; $startedPg = -not $wasRunning }
 try {
@@ -86,7 +88,7 @@ try {
     Write-Ok 'tables ready'
 
     # ---------- 5) 설정 폴더 ----------
-    Write-Step '5/6 Settings folder'
+    Write-Step '5/7 Settings folder'
     $src = if ($Settings) { $Settings } else { $SettingsDir }
     if ($NoSettings) {
         Write-Info '건너뜀 (-NoSettings)'
@@ -104,7 +106,7 @@ try {
 }
 
 # ---------- 6) Neo4j (선택) ----------
-Write-Step '6/6 Neo4j (optional)'
+Write-Step '6/7 Neo4j (optional)'
 if (Get-Neo4jHome) {
     if ((Read-EnvFile)['PRISM_NEO4J_PASSWORD']) { Write-Ok 'Neo4j configured' }
     else {
@@ -112,6 +114,21 @@ if (Get-Neo4jHome) {
         Write-Ok 'Neo4j password set (backend\.env)'
     }
 } else { Write-Info '번들에 Neo4j 가 없어 건너뜀 (제품 계보 그래프 기능만 꺼짐)' }
+
+# ---------- 7) 다른 PC 에서 접속 (방화벽) ----------
+Write-Step '7/7 Network access (Windows firewall)'
+$fw = Join-Path $PSScriptRoot 'firewall.ps1'
+& $fw -Check
+if ($LASTEXITCODE -ne 0) {
+    if ($NoFirewall) {
+        Write-Info '건너뜀 (-NoFirewall). 다른 PC 에서 접속하려면 나중에 firewall.bat 을 실행하세요.'
+    } elseif ($env:PRISM_NO_PAUSE -eq '1') {
+        Write-Info '자동 실행이라 건너뜀. 다른 PC 에서 접속하려면 firewall.bat 을 실행하세요 (관리자 권한).'
+    } else {
+        & $fw
+        if ($LASTEXITCODE -ne 0) { Write-Warn2 '방화벽을 열지 못했습니다. 이 PC 에서만 접속됩니다 — 나중에 firewall.bat 을 다시 실행하세요.' }
+    }
+}
 
 New-Item -ItemType Directory -Force $RunDir, $LogDir | Out-Null
 @{ installed_at = (Get-Date).ToString('s'); python = $ver; native = $nv } | ConvertTo-Json | Set-Content (Join-Path $Runtime 'installed.json') -Encoding UTF8
